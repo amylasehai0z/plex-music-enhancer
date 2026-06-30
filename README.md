@@ -54,6 +54,27 @@ The doctor command checks the Python version, validates configuration, verifies
 the Plex URL setting, attempts a Plex connection, and prints a Rich diagnostics
 table.
 
+## Metadata Providers
+
+The provider framework lives under `src/plex_music_enhancer/providers/` and is
+read-only. It gathers candidate metadata from external sources, normalizes it
+into Pydantic models, and does not write anything back to Plex.
+
+- `MetadataProvider` defines the common provider interface:
+  `search_artist()`, `search_album()`, `get_artist_summary()`, and
+  `get_album_summary()`.
+- `MusicBrainzProvider` uses the official MusicBrainz web service for artist
+  and release-group lookup.
+- `WikipediaProvider` uses the official Wikipedia REST API for title search and
+  page summaries.
+- `ProviderManager` queries providers in order, merges the first useful values,
+  tracks source attribution, and returns unified `ArtistMetadata` or
+  `AlbumMetadata` models.
+
+The normalized metadata models include `title`, `artist`, `summary`,
+`language`, `source`, and `confidence`. AI enrichment and Plex writes are
+intentionally outside this layer.
+
 ## Development
 
 Run the test suite:

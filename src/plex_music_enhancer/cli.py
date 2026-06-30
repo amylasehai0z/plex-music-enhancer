@@ -39,6 +39,15 @@ from plex_music_enhancer.plex import (
     PlexScannerError,
     PlexWriteProbe,
 )
+from plex_music_enhancer.services import (
+    AlbumMetadataDocument,
+    EnrichmentPreviewDocument,
+    EnrichmentPreviewService,
+    MatchResult,
+    MetadataEnrichmentPipeline,
+    MusicBrainzMatcher,
+    PreviewError,
+)
 
 app = typer.Typer(
     name=CLI_NAME,
@@ -55,6 +64,8 @@ inspect_app = typer.Typer(help="Inspect Plex metadata without modifying Plex.")
 app.add_typer(inspect_app, name="inspect")
 probe_app = typer.Typer(help="Probe Plex write capabilities safely.")
 app.add_typer(probe_app, name="probe")
+metadata_app = typer.Typer(help="Gather and normalize metadata without modifying Plex.")
+app.add_typer(metadata_app, name="metadata")
 console = Console()
 
 
@@ -167,6 +178,48 @@ def login() -> None:
 
     if any(not check.ok for check in checks):
         raise typer.Exit(code=1)
+
+
+@app.command(name="match")
+def match_album(
+    artist: Annotated[str, typer.Option("--artist", help="Artist name.")],
+    album: Annotated[str, typer.Option("--album", help="Album title.")],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete match result as JSON."),
+    ] = False,
+) -> None:
+    """Match an album to a MusicBrainz release group without modifying Plex."""
+    matcher = MusicBrainzMatcher()
+
+    try:
+        result = matcher.match_album(artist_name=artist, album_title=album)
+    except Exception as exc:
+        console.print(f"[red]Unable to match MusicBrainz metadata:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(result.model_dump_json(indent=2))
+    else:
+        _render_match_result(result)
+
+
+@app.command()
+def preview(
+    artist: Annotated[str, typer.Option("--artist", help="Artist name.")],
+    album: Annotated[str, typer.Option("--album", help="Album title.")],
+) -> None:
+    """Preview album metadata readiness without generating text or modifying Plex."""
+    service, token = _create_preview_service()
+
+    try:
+        document = service.preview_album(artist=artist, album=album)
+    except PreviewError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to preview album enrichment:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    _render_enrichment_preview(document)
 
 
 @scan_app.callback()
@@ -395,6 +448,35 @@ def write(
     _render_write_probe(report)
 
 
+@metadata_app.command(name="album")
+def album_metadata(
+    artist: Annotated[str, typer.Option("--artist", help="Artist name.")],
+    album: Annotated[str, typer.Option("--album", help="Album title.")],
+    year: Annotated[int | None, typer.Option("--year", help="Optional release year.")] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the normalized metadata document as JSON."),
+    ] = False,
+    save: Annotated[
+        bool,
+        typer.Option("--save", help="Save metadata JSON under exports/metadata/."),
+    ] = False,
+) -> None:
+    """Gather normalized album metadata without modifying Plex."""
+    pipeline = MetadataEnrichmentPipeline()
+    document = pipeline.enrich_album(artist=artist, album=album, year=year)
+
+    if json_output:
+        console.print_json(document.model_dump_json(indent=2))
+    else:
+        _render_album_metadata_document(document)
+
+    if save:
+        export_path = _metadata_export_path(artist, album)
+        _write_scan_export(export_path, document)
+        console.print(f"[green]Saved metadata JSON to {export_path}[/green]")
+
+
 def _inspect_target(
     target: InspectTarget,
     *,
@@ -572,6 +654,31 @@ def _create_write_probe() -> tuple[PlexWriteProbe, SecretStr]:
         raise typer.Exit(code=1)
 
     return PlexWriteProbe(plex_url, plex_token), plex_token
+
+
+def _create_preview_service() -> tuple[EnrichmentPreviewService, SecretStr]:
+    """Create a configured enrichment preview service or exit with an error."""
+    try:
+        settings = Settings()
+    except ValidationError as exc:
+        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
+        raise typer.Exit(code=1) from exc
+
+    if not settings.has_plex_configuration:
+        console.print(
+            "[red]Missing Plex configuration.[/red] "
+            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
+            "PLEX_ENHANCER_PLEX_TOKEN."
+        )
+        raise typer.Exit(code=1)
+
+    plex_url = settings.plex_url
+    plex_token = settings.plex_token
+    if plex_url is None or plex_token is None:
+        console.print("[red]Missing Plex URL or token.[/red]")
+        raise typer.Exit(code=1)
+
+    return EnrichmentPreviewService(plex_url, plex_token), plex_token
 
 
 def _raise_scan_error(scan_target: str, exc: PlexScannerError, token: SecretStr) -> None:
@@ -814,6 +921,109 @@ def _render_write_probe(report: AlbumWriteVerificationReport) -> None:
         console.print(report.exception)
 
 
+def _render_album_metadata_document(document: AlbumMetadataDocument) -> None:
+    """Render an album metadata enrichment document."""
+    console.rule("PLEX")
+    plex = Table(show_header=False)
+    plex.add_column("Field", style="bold")
+    plex.add_column("Value")
+    plex.add_row("Artist", document.plex.artist)
+    plex.add_row("Album", document.plex.album)
+    plex.add_row("Year", str(document.plex.year or ""))
+    plex.add_row("Summary", document.plex.summary or "")
+    console.print(plex)
+
+    console.rule("MUSICBRAINZ")
+    musicbrainz = Table(show_header=False)
+    musicbrainz.add_column("Field", style="bold")
+    musicbrainz.add_column("Value")
+    musicbrainz.add_row("Matched", "yes" if document.musicbrainz.matched else "no")
+    musicbrainz.add_row("Confidence", str(document.musicbrainz.confidence))
+    musicbrainz.add_row("MBID", document.musicbrainz.artist_mbid or "")
+    musicbrainz.add_row("Release Group", document.musicbrainz.release_group_mbid or "")
+    musicbrainz.add_row("Release Date", document.musicbrainz.release_date or "")
+    musicbrainz.add_row("Primary Type", document.musicbrainz.primary_type or "")
+    musicbrainz.add_row("Secondary Types", ", ".join(document.musicbrainz.secondary_types))
+    musicbrainz.add_row("Genres", ", ".join(document.musicbrainz.genres))
+    musicbrainz.add_row("Tags", ", ".join(document.musicbrainz.tags))
+    console.print(musicbrainz)
+
+    console.rule("NORMALIZED METADATA")
+    metadata = Table(show_header=False)
+    metadata.add_column("Field", style="bold")
+    metadata.add_column("Value")
+    metadata.add_row("Artist", document.metadata.artist)
+    metadata.add_row("Album", document.metadata.album)
+    metadata.add_row("Year", str(document.metadata.year or ""))
+    metadata.add_row("Genres", ", ".join(document.metadata.genres))
+    metadata.add_row("Summary", document.metadata.summary or "")
+    metadata.add_row("Sources", ", ".join(document.metadata.sources))
+    metadata.add_row("Confidence", str(document.metadata.confidence))
+    console.print(metadata)
+
+
+def _render_match_result(result: MatchResult) -> None:
+    """Render a MusicBrainz match result."""
+    table = Table(title="MusicBrainz Match", show_lines=False)
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("Artist", result.artist_name or "")
+    table.add_row("Album", result.album_title or "")
+    table.add_row("Confidence (0-100)", str(result.confidence))
+    table.add_row("MusicBrainz Artist ID", result.artist_mbid or "")
+    table.add_row("Release Group ID", result.release_group_mbid or "")
+    table.add_row("Release ID", result.release_mbid or "")
+    table.add_row("Release Year", str(result.release_year or ""))
+    table.add_row("Primary Type", result.primary_type or "")
+    table.add_row("Secondary Types", ", ".join(result.secondary_types))
+    table.add_row("Warnings", "\n".join(result.warnings))
+    console.print(table)
+
+
+def _render_enrichment_preview(document: EnrichmentPreviewDocument) -> None:
+    """Render a read-only enrichment preview."""
+    album = Table(title="Plex Album", show_lines=False)
+    album.add_column("Field", style="bold")
+    album.add_column("Value")
+    album.add_row("Title", document.plex.title)
+    album.add_row("Artist", document.plex.artist)
+    album.add_row("Current summary", document.plex.current_summary or "")
+    album.add_row("Year", str(document.plex.year or ""))
+    album.add_row("Genres", ", ".join(document.plex.genres))
+    console.print(album)
+
+    provider = Table(title="Provider Checks", show_lines=False)
+    provider.add_column("Check", style="bold")
+    provider.add_column("Status")
+    provider.add_row("✓ Provider reachable", _yes_no(document.provider.reachable))
+    provider.add_row("✓ Match found", _yes_no(document.provider.match_found))
+    provider.add_row("✓ Metadata available", _yes_no(document.provider.metadata_available))
+    if document.provider.error:
+        provider.add_row("Error", document.provider.error)
+    console.print(provider)
+
+    musicbrainz = Table(title="MusicBrainz", show_lines=False)
+    musicbrainz.add_column("Field", style="bold")
+    musicbrainz.add_column("Value")
+    metadata = document.metadata.musicbrainz if document.metadata is not None else None
+    musicbrainz.add_row("MusicBrainz ID", metadata.artist_mbid if metadata else "")
+    musicbrainz.add_row("Release Group", metadata.release_group_mbid if metadata else "")
+    release_year = str(document.metadata.metadata.year) if document.metadata else ""
+    musicbrainz.add_row("Release Year", release_year)
+    musicbrainz.add_row("Genres", ", ".join(metadata.genres) if metadata else "")
+    console.print(musicbrainz)
+
+    if document.ready_for_ai_enrichment:
+        console.print("[green]This album is ready for AI enrichment.[/green]")
+    else:
+        console.print("[yellow]This album is not ready for AI enrichment yet.[/yellow]")
+
+
+def _yes_no(value: bool) -> str:
+    """Return a Rich status label."""
+    return "[green]yes[/green]" if value else "[red]no[/red]"
+
+
 def _format_probe_status(status: str) -> str:
     """Return a Rich-formatted write probe status."""
     if status == "SUCCESS":
@@ -967,6 +1177,17 @@ def _inspection_export_path(
     )
     safe_identifier = sub(r"[^A-Za-z0-9_.-]+", "-", identifier).strip("-") or "unknown"
     return Path("exports") / "inspect" / f"{target.value}-{safe_identifier}.json"
+
+
+def _metadata_export_path(artist: str, album: str) -> Path:
+    """Return the export path for saved album metadata."""
+    filename = f"{_safe_export_segment(artist)}-{_safe_export_segment(album)}.json"
+    return Path("exports") / "metadata" / filename
+
+
+def _safe_export_segment(value: str) -> str:
+    """Return a filesystem-safe export path segment."""
+    return sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-") or "unknown"
 
 
 def _format_validation_error(exc: ValidationError) -> str:
