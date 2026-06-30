@@ -1,0 +1,44 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+.coverage
+.coverage.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.tox/
+.nox/
+
+.venv/
+venv/
+ENV/
+
+build/
+dist/
+*.egg-info/
+
+.idea/
+.vscode/
+
+htmlcov/
+
+# Logs
+*.log
+logs/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Local caches
+cache/
+data/

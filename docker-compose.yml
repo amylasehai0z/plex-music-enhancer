@@ -1,0 +1,10 @@
+services:
+  plex-music-enhancer:
+    build:
+      context: .
+    environment:
+      PLEX_ENHANCER_PLEX_URL: ${PLEX_ENHANCER_PLEX_URL:-http://host.docker.internal:32400}
+      PLEX_ENHANCER_PLEX_TOKEN: ${PLEX_ENHANCER_PLEX_TOKEN:-}
+      PLEX_ENHANCER_REQUEST_TIMEOUT_SECONDS: ${PLEX_ENHANCER_REQUEST_TIMEOUT_SECONDS:-5}
+      PLEX_ENHANCER_LOG_LEVEL: ${PLEX_ENHANCER_LOG_LEVEL:-INFO}
+    command: ["doctor"]
