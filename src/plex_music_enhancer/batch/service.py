@@ -76,7 +76,7 @@ class BatchReviewStep(BaseModel):
 
     candidate: BatchAlbumCandidate
     plan: EnrichmentPlan
-    review: ReviewDocument
+    review: ReviewDocument | None = None
 
 
 class BatchReviewError(Exception):
@@ -152,6 +152,20 @@ class BatchReviewService:
                     report = _add_step_result(report, step_result, job_path)
                     continue
 
+                if plan.action is EnrichmentAction.REVIEW:
+                    step = BatchReviewStep(candidate=candidate, plan=plan)
+                    if display is not None:
+                        display(step)
+                    decision = decide(step)
+                    if decision == "QUIT":
+                        return report.model_copy(update={"quit_requested": True})
+
+                    step_result = _skipped_result(candidate, message=plan.reason)
+                    progress = progress.mark_completed(candidate.rating_key)
+                    job_path = self._progress_store.save(progress)
+                    report = _add_step_result(report, step_result, job_path)
+                    continue
+
                 review = self._review_service.create_review(
                     artist=candidate.artist,
                     album=candidate.album,
@@ -163,6 +177,9 @@ class BatchReviewService:
 
                 decision = decide(step)
                 while decision == "EDIT":
+                    if review is None:
+                        decision = "SKIP"
+                        break
                     if edit is None:
                         decision = "SKIP"
                         break

@@ -17,6 +17,40 @@ class EnrichmentAction(StrEnum):
     REVIEW = "REVIEW"
 
 
+class QualityLevel(StrEnum):
+    """Content quality level."""
+
+    EXCELLENT = "EXCELLENT"
+    GOOD = "GOOD"
+    FAIR = "FAIR"
+    POOR = "POOR"
+
+
+class ContentIssue(StrEnum):
+    """Detected content quality issue."""
+
+    SHORT = "SHORT"
+    PLACEHOLDER = "PLACEHOLDER"
+    REPETITIVE = "REPETITIVE"
+    MACHINE_TRANSLATION = "MACHINE_TRANSLATION"
+    LOW_READABILITY = "LOW_READABILITY"
+    UNKNOWN_LANGUAGE = "UNKNOWN_LANGUAGE"
+    EXCESSIVE_WHITESPACE = "EXCESSIVE_WHITESPACE"
+    FORMATTING_PROBLEMS = "FORMATTING_PROBLEMS"
+    INCOMPLETE_SENTENCE = "INCOMPLETE_SENTENCE"
+    MISSING = "MISSING"
+
+
+class ContentQualityReport(BaseModel):
+    """Quality analysis for an existing Plex summary."""
+
+    model_config = ConfigDict(frozen=True)
+
+    quality_score: int = Field(ge=0, le=100)
+    quality_level: QualityLevel
+    issues: list[ContentIssue] = Field(default_factory=list)
+
+
 class EnrichmentPlan(BaseModel):
     """Recommended enrichment plan for one album."""
 
@@ -26,6 +60,7 @@ class EnrichmentPlan(BaseModel):
     reason: str
     language: str
     confidence: float = Field(ge=0.0, le=1.0)
+    quality: ContentQualityReport
 
 
 class PlannedAlbum(BaseModel):

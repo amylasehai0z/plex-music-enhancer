@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from plex_music_enhancer.planner import EnrichmentPlan
 from plex_music_enhancer.services import ArtistPreviewDocument, EnrichmentPreviewDocument
 
 QualityStatus = Literal["PASS", "WARNINGS", "FAILED"]
@@ -43,3 +44,4 @@ class ReviewDocument(BaseModel):
     diff: str
     quality: QualityReport
     edited: bool = False
+    plan: EnrichmentPlan | None = None

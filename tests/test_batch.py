@@ -138,7 +138,7 @@ def test_batch_review_service_uses_planner_actions(tmp_path: Path) -> None:
             [
                 _candidate("1", summary="The album is a jazz recording with a reflective tone."),
                 _candidate("2", summary="Das Album ist kurz."),
-                _candidate("3", summary=" ".join(["Das Album ist gut und vollständig."] * 20)),
+                _candidate("3", summary=_excellent_existing_german_summary()),
             ]
         ),
         review_service=review_service,  # type: ignore[arg-type]
@@ -155,7 +155,33 @@ def test_batch_review_service_uses_planner_actions(tmp_path: Path) -> None:
     assert review_service.prompt_names == ["album_translate", "album_improve"]
     assert report.processed == 3
     assert report.skipped == 3
-    assert report.results[2].message == "German summary already appears complete enough."
+    assert report.results[2].message == "German summary quality is high (100/100)."
+
+
+def test_batch_review_service_asks_for_review_without_ai(tmp_path: Path) -> None:
+    """Manual review plans should ask the user without invoking AI."""
+    review_service = FakeReviewService()
+    displayed_steps = []
+    service = BatchReviewService(
+        album_source=FakeAlbumSource(
+            [_candidate("1", summary="Ambient textures, nocturne, modal phrasing.")]
+        ),
+        review_service=review_service,  # type: ignore[arg-type]
+        apply_service=FakeApplyService(),  # type: ignore[arg-type]
+        progress_store=BatchProgressStore(directory=tmp_path / "exports" / "jobs"),
+    )
+
+    report = service.review_albums(
+        options=BatchReviewOptions(missing_only=False),
+        display=displayed_steps.append,
+        decide=lambda step: "SKIP",
+    )
+
+    assert review_service.prompt_names == []
+    assert displayed_steps[0].review is None
+    assert report.processed == 1
+    assert report.skipped == 1
+    assert "language is neither clearly German nor English" in report.results[0].message
 
 
 def test_batch_review_service_quit_stops_without_marking_item(tmp_path: Path) -> None:
@@ -434,3 +460,16 @@ def _german_summary(*, prefix: str = "Das Album ist") -> str:
         "Sprache",
     ]
     return " ".join(words[index % len(words)] for index in range(90)) + "."
+
+
+def _excellent_existing_german_summary() -> str:
+    """Return an existing German summary that planner should skip."""
+    return (
+        "Das Album verbindet soulige Gesangspassagen mit zurückhaltenden Jazz- und "
+        "Blues-Elementen. Die Arrangements lassen der Stimme viel Raum und setzen auf "
+        "klare Dynamik statt auf überladene Produktion. Besonders prägend ist die "
+        "konzentrierte Atmosphäre, die zwischen stiller Spannung und kraftvollen "
+        "Akzenten wechselt. Dadurch entsteht eine sachliche, gut einordnbare "
+        "Beschreibung des musikalischen Charakters, ohne einzelne Fakten unnötig zu "
+        "wiederholen."
+    )
