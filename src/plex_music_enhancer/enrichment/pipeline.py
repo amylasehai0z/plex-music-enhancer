@@ -10,14 +10,26 @@ from pydantic import AnyHttpUrl, SecretStr
 
 from plex_music_enhancer.enrichment.models import (
     AlbumContext,
+    ArtistContext,
     MusicBrainzAlbumContext,
+    MusicBrainzArtistContext,
     PlexAlbumContext,
+    PlexArtistContext,
     WikipediaAlbumContext,
+    WikipediaArtistContext,
 )
-from plex_music_enhancer.enrichment.validators import validate_album_context
+from plex_music_enhancer.enrichment.validators import (
+    validate_album_context,
+    validate_artist_context,
+)
 from plex_music_enhancer.providers import ProviderManager, WikipediaProvider
 from plex_music_enhancer.providers.base import AlbumMetadata
-from plex_music_enhancer.providers.musicbrainz import MusicBrainzAlbumMetadata, MusicBrainzProvider
+from plex_music_enhancer.providers.musicbrainz import (
+    MusicBrainzAlbumMetadata,
+    MusicBrainzArtistMetadata,
+    MusicBrainzArtistSearchResult,
+    MusicBrainzProvider,
+)
 from plex_music_enhancer.providers.wikipedia import WikipediaSummary
 from plex_music_enhancer.services.musicbrainz_matcher import MatchResult, MusicBrainzMatcher
 
@@ -60,6 +72,12 @@ class _MusicBrainzProvider(Protocol):
     def get_album_metadata(self, mbid: str) -> MusicBrainzAlbumMetadata:
         """Return release-group metadata."""
 
+    def search_artist(self, name: str, *, limit: int = 5) -> list[MusicBrainzArtistSearchResult]:
+        """Search artists by name."""
+
+    def get_artist_metadata(self, mbid: str) -> MusicBrainzArtistMetadata:
+        """Return artist metadata."""
+
 
 class _WikipediaLookupProvider(Protocol):
     """Wikipedia lookup provider interface used for detailed page fields."""
@@ -68,6 +86,9 @@ class _WikipediaLookupProvider(Protocol):
 
     def lookup_album(self, artist: str, album: str) -> WikipediaSummary | None:
         """Return detailed Wikipedia summary data."""
+
+    def lookup_artist(self, artist: str) -> WikipediaSummary | None:
+        """Return detailed Wikipedia artist summary data."""
 
 
 class EnrichmentPipeline:
@@ -126,6 +147,37 @@ class EnrichmentPipeline:
             pipeline=pipeline_context,
         )
 
+    def collect_artist_context(self, *, artist: str) -> ArtistContext:
+        """Collect all available metadata for one Plex artist without modifying Plex."""
+        plex_artist = self._read_plex_artist(artist=artist)
+        plex_context = _plex_artist_context(plex_artist, requested_artist=artist)
+        warnings: list[str] = []
+        collected_sources = ["plex"]
+
+        artist_match = self._match_artist(plex_context, warnings)
+        artist_metadata = self._musicbrainz_artist(artist_match, warnings)
+        musicbrainz_context = _musicbrainz_artist_context(artist_match, artist_metadata)
+        if musicbrainz_context.artist_mbid is not None:
+            collected_sources.append("musicbrainz")
+
+        wikipedia_context = self._wikipedia_artist_context(plex_context, warnings)
+        if wikipedia_context.extract is not None:
+            collected_sources.append("wikipedia")
+
+        pipeline_context = validate_artist_context(
+            plex=plex_context,
+            musicbrainz=musicbrainz_context,
+            wikipedia=wikipedia_context,
+            collected_sources=collected_sources,
+            warnings=warnings,
+        )
+        return ArtistContext(
+            plex=plex_context,
+            musicbrainz=musicbrainz_context,
+            wikipedia=wikipedia_context,
+            pipeline=pipeline_context,
+        )
+
     def _read_plex_album(self, *, artist: str, album: str) -> Any:
         """Read exactly one album from Plex."""
         try:
@@ -138,6 +190,20 @@ class EnrichmentPipeline:
             raise
         except Exception as exc:
             msg = str(exc) or "Unable to read album from Plex."
+            raise EnrichmentPipelineError(msg) from exc
+
+    def _read_plex_artist(self, *, artist: str) -> Any:
+        """Read exactly one artist from Plex."""
+        try:
+            server = cast(
+                _PlexServer,
+                self._plex_server_factory(self._base_url, self._token.get_secret_value()),
+            )
+            return _find_artist(server, artist=artist)
+        except EnrichmentPipelineError:
+            raise
+        except Exception as exc:
+            msg = str(exc) or "Unable to read artist from Plex."
             raise EnrichmentPipelineError(msg) from exc
 
     def _match_musicbrainz(
@@ -174,6 +240,45 @@ class EnrichmentPipeline:
             warnings.append(f"MusicBrainz metadata lookup failed: {exc}")
             return None
 
+    def _match_artist(
+        self,
+        plex: PlexArtistContext,
+        warnings: list[str],
+    ) -> MusicBrainzArtistSearchResult | None:
+        """Resolve the Plex artist against MusicBrainz."""
+        try:
+            candidates = self._musicbrainz_provider.search_artist(plex.artist, limit=5)
+        except Exception as exc:
+            warnings.append(f"MusicBrainz artist search failed: {exc}")
+            return None
+
+        if not candidates:
+            warnings.append("MusicBrainz artist match was not available.")
+            return None
+
+        exact = [
+            candidate
+            for candidate in candidates
+            if _normalize(candidate.name) == _normalize(plex.artist)
+            or any(_normalize(alias.name) == _normalize(plex.artist) for alias in candidate.aliases)
+        ]
+        return max(exact or candidates, key=lambda candidate: candidate.score or 0)
+
+    def _musicbrainz_artist(
+        self,
+        match: MusicBrainzArtistSearchResult | None,
+        warnings: list[str],
+    ) -> MusicBrainzArtistMetadata | None:
+        """Retrieve MusicBrainz artist metadata for a match."""
+        if match is None:
+            return None
+
+        try:
+            return self._musicbrainz_provider.get_artist_metadata(match.mbid)
+        except Exception as exc:
+            warnings.append(f"MusicBrainz artist metadata lookup failed: {exc}")
+            return None
+
     def _wikipedia_context(
         self,
         plex: PlexAlbumContext,
@@ -201,6 +306,30 @@ class EnrichmentPipeline:
 
         warnings.append("Wikipedia metadata was not available.")
         return WikipediaAlbumContext()
+
+    def _wikipedia_artist_context(
+        self,
+        plex: PlexArtistContext,
+        warnings: list[str],
+    ) -> WikipediaArtistContext:
+        """Resolve Wikipedia biography data."""
+        try:
+            summary = self._wikipedia_provider.lookup_artist(plex.artist)
+        except Exception as exc:
+            warnings.append(f"Wikipedia artist lookup failed: {exc}")
+            summary = None
+
+        if summary is None:
+            warnings.append("Wikipedia artist metadata was not available.")
+            return WikipediaArtistContext()
+
+        return WikipediaArtistContext(
+            language=summary.language,
+            title=summary.title,
+            extract=summary.extract,
+            page_url=summary.url,
+            thumbnail_url=summary.thumbnail,
+        )
 
     def _provider_manager_album_metadata(
         self,
@@ -243,6 +372,25 @@ def _find_album(server: _PlexServer, *, artist: str, album: str) -> Any:
     return matches[0]
 
 
+def _find_artist(server: _PlexServer, *, artist: str) -> Any:
+    """Find exactly one Plex artist by title."""
+    matches: list[Any] = []
+    artist_query = _normalize(artist)
+
+    for section in _music_sections(server.library.sections()):
+        for plex_artist in _safe_items(getattr(section, "all", None)):
+            if _normalize(getattr(plex_artist, "title", None)) == artist_query:
+                matches.append(plex_artist)
+
+    if not matches:
+        raise EnrichmentPipelineError(f'No Plex artist named "{artist}" was found.')
+
+    if len(matches) > 1:
+        raise EnrichmentPipelineError(f'Found {len(matches)} Plex artists named "{artist}".')
+
+    return matches[0]
+
+
 def _plex_context(album: Any, *, requested_artist: str) -> PlexAlbumContext:
     """Convert a Plex album object to normalized context."""
     return PlexAlbumContext(
@@ -254,6 +402,17 @@ def _plex_context(album: Any, *, requested_artist: str) -> PlexAlbumContext:
         genres=_tag_names(getattr(album, "genres", [])),
         styles=_tag_names(getattr(album, "styles", [])),
         moods=_tag_names(getattr(album, "moods", [])),
+    )
+
+
+def _plex_artist_context(artist: Any, *, requested_artist: str) -> PlexArtistContext:
+    """Convert a Plex artist object to normalized context."""
+    return PlexArtistContext(
+        rating_key=_string(getattr(artist, "ratingKey", None)) or "",
+        artist=_string(getattr(artist, "title", None)) or requested_artist,
+        summary=_string(getattr(artist, "summary", None)),
+        genres=_tag_names(getattr(artist, "genres", [])),
+        country=_string(getattr(artist, "country", None)),
     )
 
 
@@ -270,6 +429,25 @@ def _musicbrainz_context(
         genres=album.genres if album is not None else [],
         tags=album.tags if album is not None else [],
         confidence=match.confidence,
+    )
+
+
+def _musicbrainz_artist_context(
+    match: MusicBrainzArtistSearchResult | None,
+    artist: MusicBrainzArtistMetadata | None,
+) -> MusicBrainzArtistContext:
+    """Build MusicBrainz artist context from search and metadata results."""
+    artist_name = artist.name if artist is not None else match.name if match is not None else None
+    country = artist.country if artist is not None else match.country if match is not None else None
+    return MusicBrainzArtistContext(
+        artist_mbid=match.mbid if match is not None else None,
+        artist_name=artist_name,
+        country=country,
+        genres=artist.genres if artist is not None else match.tags if match is not None else [],
+        begin_date=artist.begin_date if artist is not None else None,
+        end_date=artist.end_date if artist is not None else None,
+        aliases=[alias.name for alias in artist.aliases] if artist is not None else [],
+        confidence=match.score if match is not None and match.score is not None else 0,
     )
 
 

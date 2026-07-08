@@ -20,6 +20,18 @@ class PlexAlbumContext(BaseModel):
     moods: list[str] = Field(default_factory=list)
 
 
+class PlexArtistContext(BaseModel):
+    """Metadata read directly from one Plex artist."""
+
+    model_config = ConfigDict(frozen=True)
+
+    rating_key: str
+    artist: str
+    summary: str | None = None
+    genres: list[str] = Field(default_factory=list)
+    country: str | None = None
+
+
 class MusicBrainzAlbumContext(BaseModel):
     """MusicBrainz identity and metadata for one album."""
 
@@ -34,8 +46,35 @@ class MusicBrainzAlbumContext(BaseModel):
     confidence: int = Field(default=0, ge=0, le=100)
 
 
+class MusicBrainzArtistContext(BaseModel):
+    """MusicBrainz identity and metadata for one artist."""
+
+    model_config = ConfigDict(frozen=True)
+
+    artist_mbid: str | None = None
+    artist_name: str | None = None
+    country: str | None = None
+    genres: list[str] = Field(default_factory=list)
+    begin_date: str | None = None
+    end_date: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+    confidence: int = Field(default=0, ge=0, le=100)
+
+
 class WikipediaAlbumContext(BaseModel):
     """Wikipedia summary metadata for one album."""
+
+    model_config = ConfigDict(frozen=True)
+
+    language: str | None = None
+    title: str | None = None
+    extract: str | None = None
+    page_url: str | None = None
+    thumbnail_url: str | None = None
+
+
+class WikipediaArtistContext(BaseModel):
+    """Wikipedia biography metadata for one artist."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -65,4 +104,15 @@ class AlbumContext(BaseModel):
     plex: PlexAlbumContext
     musicbrainz: MusicBrainzAlbumContext
     wikipedia: WikipediaAlbumContext
+    pipeline: PipelineContext
+
+
+class ArtistContext(BaseModel):
+    """Normalized artist context document for preview, review, and apply."""
+
+    model_config = ConfigDict(frozen=True)
+
+    plex: PlexArtistContext
+    musicbrainz: MusicBrainzArtistContext
+    wikipedia: WikipediaArtistContext
     pipeline: PipelineContext

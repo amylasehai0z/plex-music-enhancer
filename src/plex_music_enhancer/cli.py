@@ -9,12 +9,24 @@ from re import sub
 from typing import Annotated
 
 import typer
+from click import edit as click_edit
 from plexapi.server import PlexServer
 from pydantic import AnyHttpUrl, BaseModel, SecretStr, TypeAdapter, ValidationError
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from plex_music_enhancer.ai import AIError, AIManager
+from plex_music_enhancer.apply import ApplyError, ApplyResult, ApplyService
+from plex_music_enhancer.batch import (
+    BatchDecision,
+    BatchReviewError,
+    BatchReviewOptions,
+    BatchReviewReport,
+    BatchReviewService,
+    BatchReviewStep,
+    PlexBatchAlbumSource,
+)
 from plex_music_enhancer.config import Settings
 from plex_music_enhancer.constants import CLI_NAME, MINIMUM_PYTHON_VERSION, __version__
 from plex_music_enhancer.enrichment import (
@@ -23,6 +35,7 @@ from plex_music_enhancer.enrichment import (
     EnrichmentPipelineError,
 )
 from plex_music_enhancer.logging import configure_logging
+from plex_music_enhancer.planner import EnrichmentPlanner, PlanningReport
 from plex_music_enhancer.plex import (
     AlbumScanItem,
     AlbumWriteVerificationReport,
@@ -44,8 +57,10 @@ from plex_music_enhancer.plex import (
     PlexScannerError,
     PlexWriteProbe,
 )
+from plex_music_enhancer.review import ReviewDocument, ReviewError, ReviewRenderer, ReviewService
 from plex_music_enhancer.services import (
     AlbumMetadataDocument,
+    ArtistPreviewDocument,
     EnrichmentPreviewDocument,
     EnrichmentPreviewService,
     MatchResult,
@@ -73,6 +88,26 @@ metadata_app = typer.Typer(help="Gather and normalize metadata without modifying
 app.add_typer(metadata_app, name="metadata")
 context_app = typer.Typer(help="Collect normalized album context without modifying Plex.")
 app.add_typer(context_app, name="context")
+preview_app = typer.Typer(
+    help="Preview generated metadata without modifying Plex.",
+    invoke_without_command=True,
+    no_args_is_help=False,
+)
+app.add_typer(preview_app, name="preview")
+review_app = typer.Typer(
+    help="Review generated metadata without modifying Plex.",
+    invoke_without_command=True,
+    no_args_is_help=False,
+)
+app.add_typer(review_app, name="review")
+apply_app = typer.Typer(
+    help="Apply approved generated metadata safely.",
+    invoke_without_command=True,
+    no_args_is_help=False,
+)
+app.add_typer(apply_app, name="apply")
+batch_app = typer.Typer(help="Process multiple albums in a guided session.")
+app.add_typer(batch_app, name="batch")
 console = Console()
 
 
@@ -130,6 +165,33 @@ def audit(
         export_path = Path("exports/audit.json")
         _write_scan_export(export_path, report)
         console.print(f"[green]Exported metadata audit to {export_path}[/green]")
+
+
+@app.command()
+def plan(
+    library: Annotated[
+        str | None,
+        typer.Option("--library", help="Plex music library title to plan."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete planning report as JSON."),
+    ] = False,
+) -> None:
+    """Plan enrichment actions for Plex albums without generating metadata."""
+    source, token = _create_planning_source()
+
+    try:
+        report = EnrichmentPlanner().plan_albums(source.scan_albums(library=library))
+    except BatchReviewError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to plan enrichment:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(report.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_planning_report(report)
 
 
 @app.command()
@@ -211,22 +273,354 @@ def match_album(
         _render_match_result(result)
 
 
-@app.command()
+@preview_app.callback()
 def preview(
-    artist: Annotated[str, typer.Option("--artist", help="Artist name.")],
-    album: Annotated[str, typer.Option("--album", help="Album title.")],
+    ctx: typer.Context,
+    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
+    album: Annotated[str | None, typer.Option("--album", help="Album title.")] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this preview."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this preview."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete preview document as JSON."),
+    ] = False,
+    save: Annotated[
+        bool,
+        typer.Option("--save", help="Save preview JSON under exports/previews/."),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", help="Show full metadata, prompt, and provider diagnostics."),
+    ] = False,
+    translate: Annotated[
+        bool,
+        typer.Option("--translate", help="Translate the current Plex summary into German."),
+    ] = False,
+    improve: Annotated[
+        bool,
+        typer.Option("--improve", help="Improve the existing German Plex summary."),
+    ] = False,
 ) -> None:
-    """Preview album metadata readiness without generating text or modifying Plex."""
-    service, token = _create_preview_service()
+    """Preview generated album enrichment without modifying Plex."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if artist is None or album is None:
+        console.print("[red]Album preview requires --artist and --album.[/red]")
+        raise typer.Exit(code=1)
+    if translate and improve:
+        console.print("[red]Choose either --translate or --improve, not both.[/red]")
+        raise typer.Exit(code=1)
+
+    service, token = _create_preview_service(provider_name=provider, model=model)
+    prompt_name = _album_preview_prompt_name(translate=translate, improve=improve)
 
     try:
-        document = service.preview_album(artist=artist, album=album)
+        document = (
+            service.preview_album(artist=artist, album=album)
+            if prompt_name == "album_summary"
+            else service.preview_album(artist=artist, album=album, prompt_name=prompt_name)
+        )
     except PreviewError as exc:
         message = _redact_secret(str(exc), token.get_secret_value())
         console.print(f"[red]Unable to preview album enrichment:[/red] {message}")
         raise typer.Exit(code=1) from exc
 
-    _render_enrichment_preview(document)
+    if json_output:
+        console.print_json(document.model_dump_json(indent=2))
+    else:
+        _render_enrichment_preview(document, verbose=verbose)
+
+    if save:
+        export_path = _preview_export_path(artist, album)
+        _write_scan_export(export_path, document)
+        console.print(f"[green]Saved preview JSON to {export_path}[/green]")
+
+
+@preview_app.command(name="artist")
+def preview_artist(
+    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this preview."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this preview."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete preview document as JSON."),
+    ] = False,
+) -> None:
+    """Preview generated artist enrichment without modifying Plex."""
+    if artist is None:
+        console.print("[red]Artist preview requires --artist.[/red]")
+        raise typer.Exit(code=1)
+
+    service, token = _create_preview_service(provider_name=provider, model=model)
+
+    try:
+        document = service.preview_artist(artist=artist)
+    except PreviewError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to preview artist enrichment:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(document.model_dump_json(indent=2))
+    else:
+        _render_artist_preview(document)
+
+
+@review_app.callback()
+def review(
+    ctx: typer.Context,
+    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
+    album: Annotated[str | None, typer.Option("--album", help="Album title.")] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this review."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this review."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete review document as JSON."),
+    ] = False,
+    translate: Annotated[
+        bool,
+        typer.Option("--translate", help="Review a German translation of the current summary."),
+    ] = False,
+    improve: Annotated[
+        bool,
+        typer.Option("--improve", help="Review an improved German version of the current summary."),
+    ] = False,
+) -> None:
+    """Interactively review generated metadata without modifying Plex."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if artist is None or album is None:
+        console.print("[red]Album review requires --artist and --album.[/red]")
+        raise typer.Exit(code=1)
+    if translate and improve:
+        console.print("[red]Choose either --translate or --improve, not both.[/red]")
+        raise typer.Exit(code=1)
+
+    service, token = _create_review_service(provider_name=provider, model=model)
+    prompt_name = _album_preview_prompt_name(translate=translate, improve=improve)
+
+    try:
+        document = (
+            service.create_review(artist=artist, album=album)
+            if prompt_name == "album_summary"
+            else service.create_review(artist=artist, album=album, prompt_name=prompt_name)
+        )
+    except (PreviewError, ReviewError) as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to create review:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(document.model_dump_json(indent=2))
+        return
+
+    _run_review_loop(service, document)
+
+
+@review_app.command(name="artist")
+def review_artist(
+    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this review."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this review."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete review document as JSON."),
+    ] = False,
+) -> None:
+    """Interactively review generated artist metadata without modifying Plex."""
+    service, token = _create_review_service(provider_name=provider, model=model)
+
+    try:
+        document = service.create_artist_review(artist=artist)
+    except (PreviewError, ReviewError) as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to create artist review:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(document.model_dump_json(indent=2))
+        return
+
+    _run_review_loop(service, document)
+
+
+@apply_app.callback()
+def apply(
+    ctx: typer.Context,
+    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
+    album: Annotated[str | None, typer.Option("--album", help="Album title.")] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this apply run."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this apply run."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete apply result as JSON."),
+    ] = False,
+    translate: Annotated[
+        bool,
+        typer.Option("--translate", help="Apply a German translation of the current summary."),
+    ] = False,
+    improve: Annotated[
+        bool,
+        typer.Option("--improve", help="Apply an improved German version of the current summary."),
+    ] = False,
+) -> None:
+    """Apply a generated album summary to Plex with backup, verification, and audit."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if artist is None or album is None:
+        console.print("[red]Album apply requires --artist and --album.[/red]")
+        raise typer.Exit(code=1)
+    if translate and improve:
+        console.print("[red]Choose either --translate or --improve, not both.[/red]")
+        raise typer.Exit(code=1)
+
+    service, token = _create_apply_service(provider_name=provider, model=model)
+    prompt_name = _album_preview_prompt_name(translate=translate, improve=improve)
+
+    try:
+        result = (
+            service.apply_album_summary(artist=artist, album=album)
+            if prompt_name == "album_summary"
+            else service.apply_album_summary(artist=artist, album=album, prompt_name=prompt_name)
+        )
+    except ApplyError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to apply album summary:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(result.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_apply_result(result)
+
+    if result.status != "SUCCESS":
+        raise typer.Exit(code=1)
+
+
+@apply_app.command(name="artist")
+def apply_artist(
+    artist: Annotated[str, typer.Option("--artist", help="Artist name.")],
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this apply run."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this apply run."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete apply result as JSON."),
+    ] = False,
+) -> None:
+    """Apply a generated artist biography to Plex with backup, verification, and audit."""
+    service, token = _create_apply_service(provider_name=provider, model=model)
+
+    try:
+        result = service.apply_artist_summary(artist=artist)
+    except ApplyError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to apply artist biography:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(result.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_apply_result(result)
+
+    if result.status != "SUCCESS":
+        raise typer.Exit(code=1)
+
+
+@batch_app.command(name="review")
+def batch_review(
+    library: Annotated[
+        str | None,
+        typer.Option("--library", help="Plex music library title to process."),
+    ] = None,
+    missing_only: Annotated[
+        bool,
+        typer.Option("--missing-only/--all", help="Only process albums missing summaries."),
+    ] = True,
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", min=1, help="Maximum number of matching albums to process."),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this batch review."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this batch review."),
+    ] = None,
+    resume: Annotated[
+        bool,
+        typer.Option("--resume", help="Resume the matching batch job from exports/jobs/."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the final batch report as JSON."),
+    ] = False,
+) -> None:
+    """Review multiple albums sequentially in one interactive session."""
+    service, token = _create_batch_review_service(provider_name=provider, model=model)
+    options = BatchReviewOptions(
+        library=library,
+        missing_only=missing_only,
+        limit=limit,
+        resume=resume,
+    )
+
+    try:
+        report = service.review_albums(
+            options=options,
+            display=_render_batch_review_step,
+            decide=_batch_review_decision,
+            edit=_batch_edit_summary,
+        )
+    except BatchReviewError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to run batch review:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(report.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_batch_review_report(report)
+
+    if report.failed:
+        raise typer.Exit(code=1)
 
 
 @scan_app.callback()
@@ -697,7 +1091,11 @@ def _create_write_probe() -> tuple[PlexWriteProbe, SecretStr]:
     return PlexWriteProbe(plex_url, plex_token), plex_token
 
 
-def _create_preview_service() -> tuple[EnrichmentPreviewService, SecretStr]:
+def _create_preview_service(
+    *,
+    provider_name: str | None = None,
+    model: str | None = None,
+) -> tuple[EnrichmentPreviewService, SecretStr]:
     """Create a configured enrichment preview service or exit with an error."""
     try:
         settings = Settings()
@@ -719,7 +1117,134 @@ def _create_preview_service() -> tuple[EnrichmentPreviewService, SecretStr]:
         console.print("[red]Missing Plex URL or token.[/red]")
         raise typer.Exit(code=1)
 
-    return EnrichmentPreviewService(plex_url, plex_token), plex_token
+    ai_settings = settings.ai
+    updates: dict[str, str] = {}
+    if provider_name is not None:
+        updates["provider"] = provider_name
+    if model is not None:
+        updates["model"] = model
+    if updates:
+        ai_settings = ai_settings.model_copy(update=updates)
+
+    try:
+        ai_manager = AIManager(settings=ai_settings)
+    except AIError as exc:
+        console.print(f"[red]AI configuration error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    return EnrichmentPreviewService(plex_url, plex_token, ai_manager=ai_manager), plex_token
+
+
+def _create_review_service(
+    *,
+    provider_name: str | None = None,
+    model: str | None = None,
+) -> tuple[ReviewService, SecretStr]:
+    """Create a configured review service or exit with an error."""
+    preview_service, token = _create_preview_service(provider_name=provider_name, model=model)
+    return ReviewService(preview_service=preview_service), token
+
+
+def _create_apply_service(
+    *,
+    provider_name: str | None = None,
+    model: str | None = None,
+) -> tuple[ApplyService, SecretStr]:
+    """Create a configured apply service or exit with an error."""
+    try:
+        settings = Settings()
+    except ValidationError as exc:
+        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
+        raise typer.Exit(code=1) from exc
+
+    if not settings.has_plex_configuration:
+        console.print(
+            "[red]Missing Plex configuration.[/red] "
+            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
+            "PLEX_ENHANCER_PLEX_TOKEN."
+        )
+        raise typer.Exit(code=1)
+
+    plex_url = settings.plex_url
+    plex_token = settings.plex_token
+    if plex_url is None or plex_token is None:
+        console.print("[red]Missing Plex URL or token.[/red]")
+        raise typer.Exit(code=1)
+
+    review_service, token = _create_review_service(provider_name=provider_name, model=model)
+    return (
+        ApplyService(
+            review_service=review_service,
+            base_url=plex_url,
+            token=plex_token,
+        ),
+        token,
+    )
+
+
+def _create_batch_review_service(
+    *,
+    provider_name: str | None = None,
+    model: str | None = None,
+) -> tuple[BatchReviewService, SecretStr]:
+    """Create a configured batch review service or exit with an error."""
+    try:
+        settings = Settings()
+    except ValidationError as exc:
+        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
+        raise typer.Exit(code=1) from exc
+
+    if not settings.has_plex_configuration:
+        console.print(
+            "[red]Missing Plex configuration.[/red] "
+            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
+            "PLEX_ENHANCER_PLEX_TOKEN."
+        )
+        raise typer.Exit(code=1)
+
+    plex_url = settings.plex_url
+    plex_token = settings.plex_token
+    if plex_url is None or plex_token is None:
+        console.print("[red]Missing Plex URL or token.[/red]")
+        raise typer.Exit(code=1)
+
+    review_service, token = _create_review_service(provider_name=provider_name, model=model)
+    apply_service = ApplyService(
+        review_service=review_service,
+        base_url=plex_url,
+        token=plex_token,
+    )
+    batch_service = BatchReviewService(
+        album_source=PlexBatchAlbumSource(plex_url, plex_token),
+        review_service=review_service,
+        apply_service=apply_service,
+    )
+    return batch_service, token
+
+
+def _create_planning_source() -> tuple[PlexBatchAlbumSource, SecretStr]:
+    """Create a configured Plex album source for planning."""
+    try:
+        settings = Settings()
+    except ValidationError as exc:
+        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
+        raise typer.Exit(code=1) from exc
+
+    if not settings.has_plex_configuration:
+        console.print(
+            "[red]Missing Plex configuration.[/red] "
+            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
+            "PLEX_ENHANCER_PLEX_TOKEN."
+        )
+        raise typer.Exit(code=1)
+
+    plex_url = settings.plex_url
+    plex_token = settings.plex_token
+    if plex_url is None or plex_token is None:
+        console.print("[red]Missing Plex URL or token.[/red]")
+        raise typer.Exit(code=1)
+
+    return PlexBatchAlbumSource(plex_url, plex_token), plex_token
 
 
 def _create_enrichment_pipeline() -> tuple[EnrichmentPipeline, SecretStr]:
@@ -987,6 +1512,104 @@ def _render_write_probe(report: AlbumWriteVerificationReport) -> None:
         console.print(report.exception)
 
 
+def _render_apply_result(result: ApplyResult) -> None:
+    """Render an apply workflow result."""
+    table = Table(title="Plex Apply Workflow", show_lines=False)
+    table.add_column("Step", style="bold")
+    table.add_column("Status")
+    table.add_column("Details")
+    table.add_row("Status", _format_apply_status(result.status), result.message)
+    table.add_row(
+        "Backup created",
+        _yes_no_plain(result.backup_created),
+        result.backup_path or "",
+    )
+    table.add_row("Write successful", _yes_no_plain(result.write_successful), "")
+    table.add_row("Verification passed", _yes_no_plain(result.verification_passed), "")
+    table.add_row("Audit stored", _yes_no_plain(result.audit_stored), result.audit_path or "")
+    table.add_row("Audit log", result.audit_path or "", "")
+    console.print(table)
+
+    if result.status != "SUCCESS":
+        console.print(f"[red]{result.message}[/red]")
+
+
+def _render_batch_review_step(step: BatchReviewStep) -> None:
+    """Render one album in a batch review session."""
+    review = step.review
+    console.rule("Album")
+    table = Table(show_header=False)
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("Library", step.candidate.library)
+    table.add_row("Artist", step.candidate.artist)
+    table.add_row("Album", step.candidate.album)
+    table.add_row("RatingKey", step.candidate.rating_key)
+    table.add_row("Recommended action", step.plan.action.value)
+    table.add_row("Plan reason", step.plan.reason)
+    table.add_row("Quality", review.quality.status)
+    console.print(table)
+
+    console.rule("Current summary")
+    console.print(review.current_summary or "[dim]No current summary.[/dim]")
+    console.rule("Generated summary")
+    console.print(review.proposed_summary or "[dim]No generated summary.[/dim]")
+
+
+def _batch_review_decision(step: BatchReviewStep) -> BatchDecision:
+    """Prompt for one batch review decision."""
+    del step
+    choice = _review_choice()
+    mapping = {
+        "A": "APPLY",
+        "E": "EDIT",
+        "S": "SKIP",
+        "Q": "QUIT",
+    }
+    return mapping.get(choice, "SKIP")
+
+
+def _batch_edit_summary(document: object) -> str | None:
+    """Open the multiline editor for batch summary edits."""
+    proposed_summary = getattr(document, "proposed_summary", "")
+    return _open_multiline_editor(str(proposed_summary))
+
+
+def _render_batch_review_report(report: BatchReviewReport) -> None:
+    """Render the final batch review summary."""
+    table = Table(title="Batch Review Summary", show_lines=False)
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", justify="right")
+    table.add_row("Processed", str(report.processed))
+    table.add_row("Applied", str(report.applied))
+    table.add_row("Skipped", str(report.skipped))
+    table.add_row("Failed", str(report.failed))
+    table.add_row("Quit", "yes" if report.quit_requested else "no")
+    table.add_row("Progress", report.job_path or "")
+    console.print(table)
+
+
+def _render_planning_report(report: PlanningReport) -> None:
+    """Render enrichment plans as a Rich table."""
+    table = Table(title="Enrichment Plan", show_lines=False)
+    table.add_column("Album", style="bold")
+    table.add_column("Current language")
+    table.add_column("Current summary length", justify="right")
+    table.add_column("Recommended action")
+    table.add_column("Reason")
+
+    for album in report.albums:
+        table.add_row(
+            f"{album.artist} - {album.album}",
+            album.plan.language,
+            str(album.current_summary_words),
+            album.plan.action.value,
+            album.plan.reason,
+        )
+
+    console.print(table)
+
+
 def _render_album_metadata_document(document: AlbumMetadataDocument) -> None:
     """Render an album metadata enrichment document."""
     console.rule("PLEX")
@@ -1099,48 +1722,208 @@ def _render_match_result(result: MatchResult) -> None:
     console.print(table)
 
 
-def _render_enrichment_preview(document: EnrichmentPreviewDocument) -> None:
-    """Render a read-only enrichment preview."""
-    album = Table(title="Plex Album", show_lines=False)
-    album.add_column("Field", style="bold")
-    album.add_column("Value")
-    album.add_row("Title", document.plex.title)
-    album.add_row("Artist", document.plex.artist)
-    album.add_row("Current summary", document.plex.current_summary or "")
-    album.add_row("Year", str(document.plex.year or ""))
-    album.add_row("Genres", ", ".join(document.plex.genres))
-    console.print(album)
+def _render_enrichment_preview(
+    document: EnrichmentPreviewDocument,
+    *,
+    verbose: bool = False,
+) -> None:
+    """Render an end-to-end generated enrichment preview."""
+    context = document.context
+    prompt = document.rendered_prompt
+    generated = document.generated_summary
 
-    provider = Table(title="Provider Checks", show_lines=False)
-    provider.add_column("Check", style="bold")
-    provider.add_column("Status")
-    provider.add_row("✓ Provider reachable", _yes_no(document.provider.reachable))
-    provider.add_row("✓ Match found", _yes_no(document.provider.match_found))
-    provider.add_row("✓ Metadata available", _yes_no(document.provider.metadata_available))
-    if document.provider.error:
-        provider.add_row("Error", document.provider.error)
-    console.print(provider)
+    console.rule("GENERATED SUMMARY")
+    console.print(generated.text)
 
-    musicbrainz = Table(title="MusicBrainz", show_lines=False)
+    console.rule("AI")
+    ai = Table(show_header=False)
+    ai.add_column("Field", style="bold")
+    ai.add_column("Value")
+    ai.add_row("Provider", generated.provider)
+    ai.add_row("Model", generated.model)
+    ai.add_row("Prompt version", generated.prompt_version)
+    if verbose:
+        ai.add_row("Prompt name", generated.prompt_name)
+        ai.add_row("Token usage", _format_token_usage(generated.metadata))
+        ai.add_row("Generation time", f"{document.generation_time_seconds:.3f}s")
+    console.print(ai)
+
+    warnings = context.pipeline.warnings
+    if warnings:
+        console.rule("Warnings")
+        for warning in warnings:
+            console.print(f"[yellow]{warning}[/yellow]")
+
+    if not verbose:
+        return
+
+    console.rule("PLEX")
+    plex = Table(show_header=False)
+    plex.add_column("Field", style="bold")
+    plex.add_column("Value")
+    plex.add_row("Artist", context.plex.artist)
+    plex.add_row("Album", context.plex.album)
+    plex.add_row("Year", str(context.plex.year or ""))
+    plex.add_row("Current summary", context.plex.summary or "")
+    plex.add_row("Genres", ", ".join(context.plex.genres))
+    console.print(plex)
+
+    console.rule("MUSICBRAINZ")
+    musicbrainz = Table(show_header=False)
     musicbrainz.add_column("Field", style="bold")
     musicbrainz.add_column("Value")
-    metadata = document.metadata.musicbrainz if document.metadata is not None else None
-    musicbrainz.add_row("MusicBrainz ID", metadata.artist_mbid if metadata else "")
-    musicbrainz.add_row("Release Group", metadata.release_group_mbid if metadata else "")
-    release_year = str(document.metadata.metadata.year) if document.metadata else ""
-    musicbrainz.add_row("Release Year", release_year)
-    musicbrainz.add_row("Genres", ", ".join(metadata.genres) if metadata else "")
+    musicbrainz.add_row(
+        "Match",
+        _yes_no(context.musicbrainz.release_group_mbid is not None),
+    )
+    musicbrainz.add_row("Artist MBID", context.musicbrainz.artist_mbid or "")
+    musicbrainz.add_row("Release Group", context.musicbrainz.release_group_mbid or "")
+    musicbrainz.add_row("Release", context.musicbrainz.release_mbid or "")
+    musicbrainz.add_row("Release Date", context.musicbrainz.release_date or "")
+    musicbrainz.add_row("Match confidence", str(context.musicbrainz.confidence))
     console.print(musicbrainz)
 
-    if document.ready_for_ai_enrichment:
-        console.print("[green]This album is ready for AI enrichment.[/green]")
+    console.rule("WIKIPEDIA")
+    wikipedia = Table(show_header=False)
+    wikipedia.add_column("Field", style="bold")
+    wikipedia.add_column("Value")
+    wikipedia.add_row("Article status", "available" if context.wikipedia.extract else "missing")
+    wikipedia.add_row("Language", context.wikipedia.language or "")
+    wikipedia.add_row("Title", context.wikipedia.title or "")
+    wikipedia.add_row("Extract", context.wikipedia.extract or "")
+    wikipedia.add_row("Page URL", context.wikipedia.page_url or "")
+    console.print(wikipedia)
+
+    console.rule("PROMPT")
+    prompt_table = Table(show_header=False)
+    prompt_table.add_column("Field", style="bold")
+    prompt_table.add_column("Value")
+    prompt_table.add_row("Prompt name", prompt.name)
+    prompt_table.add_row("Prompt version", prompt.version)
+    prompt_table.add_row("Variables used", ", ".join(sorted(prompt.variables)))
+    console.print(prompt_table)
+
+    console.rule("Warnings")
+    if warnings:
+        for warning in warnings:
+            console.print(f"[yellow]{warning}[/yellow]")
     else:
-        console.print("[yellow]This album is not ready for AI enrichment yet.[/yellow]")
+        console.print("[green]None[/green]")
+
+
+def _render_artist_preview(document: ArtistPreviewDocument) -> None:
+    """Render an end-to-end generated artist preview."""
+    context = document.context
+    generated = document.generated_summary
+
+    console.rule("GENERATED BIOGRAPHY")
+    console.print(generated.text)
+
+    console.rule("AI")
+    ai = Table(show_header=False)
+    ai.add_column("Field", style="bold")
+    ai.add_column("Value")
+    ai.add_row("Provider", generated.provider)
+    ai.add_row("Model", generated.model)
+    ai.add_row("Prompt version", generated.prompt_version)
+    console.print(ai)
+
+    console.rule("PLEX")
+    plex = Table(show_header=False)
+    plex.add_column("Field", style="bold")
+    plex.add_column("Value")
+    plex.add_row("Artist", context.plex.artist)
+    plex.add_row("Current summary", context.plex.summary or "")
+    plex.add_row("Genres", ", ".join(context.plex.genres))
+    console.print(plex)
+
+    console.rule("MUSICBRAINZ")
+    musicbrainz = Table(show_header=False)
+    musicbrainz.add_column("Field", style="bold")
+    musicbrainz.add_column("Value")
+    musicbrainz.add_row("Artist MBID", context.musicbrainz.artist_mbid or "")
+    musicbrainz.add_row("Confidence", str(context.musicbrainz.confidence))
+    musicbrainz.add_row("Genres", ", ".join(context.musicbrainz.genres))
+    console.print(musicbrainz)
+
+    console.rule("WIKIPEDIA")
+    wikipedia = Table(show_header=False)
+    wikipedia.add_column("Field", style="bold")
+    wikipedia.add_column("Value")
+    wikipedia.add_row("Article status", "available" if context.wikipedia.extract else "missing")
+    wikipedia.add_row("Language", context.wikipedia.language or "")
+    wikipedia.add_row("Title", context.wikipedia.title or "")
+    console.print(wikipedia)
+
+
+def _format_token_usage(metadata: dict[str, object]) -> str:
+    """Return token usage from generated summary metadata."""
+    prompt_tokens = metadata.get("prompt_tokens")
+    completion_tokens = metadata.get("completion_tokens")
+    if prompt_tokens is None and completion_tokens is None:
+        return "not reported"
+
+    return f"prompt={prompt_tokens or 0}, completion={completion_tokens or 0}"
+
+
+def _review_choice() -> str:
+    """Prompt for one review workflow choice."""
+    return typer.prompt("[A] Apply  [E] Edit  [S] Skip  [Q] Quit").strip().upper()[:1]
+
+
+def _open_multiline_editor(initial_text: str) -> str | None:
+    """Open a terminal editor for multiline summary edits."""
+    edited = click_edit(text=initial_text)
+    if edited is None:
+        return None
+
+    return edited.strip()
+
+
+def _run_review_loop(service: ReviewService, document: ReviewDocument) -> None:
+    """Run the shared interactive review loop."""
+    renderer = ReviewRenderer(console)
+    renderer.render(document)
+
+    while True:
+        choice = _review_choice()
+        if choice == "A":
+            if document.quality.status != "PASS":
+                console.print("[red]Generated summary must pass validation before Apply.[/red]")
+                continue
+
+            console.print("[yellow]Apply workflow not implemented yet.[/yellow]")
+            return
+
+        if choice == "E":
+            edited_text = _open_multiline_editor(document.proposed_summary)
+            if edited_text is None:
+                console.print("[yellow]Edit cancelled.[/yellow]")
+                continue
+
+            document = service.update_summary(document, edited_text)
+            renderer.render(document)
+            continue
+
+        if choice == "S":
+            console.print("[yellow]Skipped. No changes were made.[/yellow]")
+            return
+
+        if choice == "Q":
+            console.print("[yellow]Quit. No changes were made.[/yellow]")
+            return
+
+        console.print("[red]Choose A, E, S, or Q.[/red]")
 
 
 def _yes_no(value: bool) -> str:
     """Return a Rich status label."""
     return "[green]yes[/green]" if value else "[red]no[/red]"
+
+
+def _yes_no_plain(value: bool) -> str:
+    """Return a plain yes/no value."""
+    return "yes" if value else "no"
 
 
 def _format_probe_status(status: str) -> str:
@@ -1153,6 +1936,14 @@ def _format_probe_status(status: str) -> str:
         return "[red]FAILED[/red]"
 
     return status
+
+
+def _format_apply_status(status: str) -> str:
+    """Return a Rich-formatted apply status."""
+    if status == "SUCCESS":
+        return "[green]SUCCESS[/green]"
+
+    return "[red]FAILED[/red]"
 
 
 def _render_inspection(inspected_object: InspectedPlexObject) -> None:
@@ -1308,6 +2099,22 @@ def _context_export_path(artist: str, album: str) -> Path:
     """Return the export path for saved album context."""
     filename = f"{_safe_export_segment(artist)}-{_safe_export_segment(album)}.json"
     return Path("exports") / "context" / filename
+
+
+def _preview_export_path(artist: str, album: str) -> Path:
+    """Return the export path for saved preview output."""
+    filename = f"{_safe_export_segment(artist)}-{_safe_export_segment(album)}.json"
+    return Path("exports") / "previews" / filename
+
+
+def _album_preview_prompt_name(*, translate: bool, improve: bool) -> str:
+    """Return the album prompt template selected by preview options."""
+    if translate:
+        return "album_translate"
+    if improve:
+        return "album_improve"
+
+    return "album_summary"
 
 
 def _safe_export_segment(value: str) -> str:

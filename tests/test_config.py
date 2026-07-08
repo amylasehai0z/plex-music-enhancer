@@ -15,6 +15,7 @@ def test_settings_load_from_environment(monkeypatch) -> None:
 
     assert str(settings.plex_url) == "http://localhost:32400/"
     assert settings.plex_token is not None
+    assert settings.ai.provider == "dummy"
     assert settings.has_plex_configuration is True
 
 
