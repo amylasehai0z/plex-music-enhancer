@@ -1,163 +1,299 @@
-"""Enrichment preview service tests."""
+"""End-to-end preview service tests."""
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from pydantic import AnyHttpUrl, SecretStr, TypeAdapter
 
-from plex_music_enhancer.services import EnrichmentPreviewService
-from plex_music_enhancer.services.enrichment import (
-    AlbumMetadata,
-    AlbumMetadataDocument,
-    MusicBrainzEnrichmentMetadata,
-    PlexAlbumMetadata,
+from plex_music_enhancer.ai import AIManager, GeneratedSummary, OpenAIProvider
+from plex_music_enhancer.ai.dummy import DUMMY_SUMMARY_TEXT
+from plex_music_enhancer.config import AISettings
+from plex_music_enhancer.enrichment import (
+    AlbumContext,
+    EnrichmentPipelineError,
+    MusicBrainzAlbumContext,
+    PipelineContext,
+    PlexAlbumContext,
+    WikipediaAlbumContext,
 )
+from plex_music_enhancer.prompts import RenderedPrompt
+from plex_music_enhancer.services import EnrichmentPreviewService, PreviewError
 
 
-class FakeGenre:
-    """Fake Plex genre tag."""
+def test_preview_service_collects_context_and_generates_summary() -> None:
+    """Preview service should connect AlbumContext collection to AI generation."""
+    pipeline = FakeContextPipeline()
+    ai_manager = FakeAIManager()
 
-    def __init__(self, tag: str) -> None:
-        self.tag = tag
+    document = _service(pipeline=pipeline, ai_manager=ai_manager).preview_album(
+        artist="Nina Simone",
+        album="Pastel Blues",
+    )
+
+    assert pipeline.received == ("Nina Simone", "Pastel Blues")
+    assert ai_manager.received == _album_context()
+    assert ai_manager.prompt == _rendered_prompt()
+    assert document.context == _album_context()
+    assert document.rendered_prompt == _rendered_prompt()
+    assert document.generated_summary.text == DUMMY_SUMMARY_TEXT
+    assert document.generated_summary.provider == "dummy"
+    assert document.generation_time_seconds >= 0
 
 
-class FakeAlbum:
-    """Fake Plex album."""
+def test_preview_service_renders_selected_album_prompt() -> None:
+    """Preview service should render specialized album prompt templates when requested."""
+    ai_manager = FakeAIManager()
+
+    document = _service(pipeline=FakeContextPipeline(), ai_manager=ai_manager).preview_album(
+        artist="Nina Simone",
+        album="Pastel Blues",
+        prompt_name="album_translate",
+    )
+
+    assert ai_manager.prompt_name == "album_translate"
+    assert document.rendered_prompt.name == "album_translate"
+
+
+def test_preview_service_reports_context_failure() -> None:
+    """Preview service should wrap context collection failures."""
+    service = _service(pipeline=FailingContextPipeline(), ai_manager=FakeAIManager())
+
+    try:
+        service.preview_album(artist="Nina Simone", album="Pastel Blues")
+    except PreviewError as exc:
+        assert "No Plex album found" in str(exc)
+    else:
+        raise AssertionError("Expected PreviewError.")
+
+
+def test_preview_service_reports_ai_failure() -> None:
+    """Preview service should wrap AI generation failures."""
+    service = _service(pipeline=FakeContextPipeline(), ai_manager=FailingAIManager())
+
+    try:
+        service.preview_album(artist="Nina Simone", album="Pastel Blues")
+    except PreviewError as exc:
+        assert "AI unavailable" in str(exc)
+    else:
+        raise AssertionError("Expected PreviewError.")
+
+
+def test_preview_service_generates_with_openai_provider() -> None:
+    """Preview service should work with OpenAIProvider through AIManager."""
+    client = FakeOpenAIClient(
+        SimpleNamespace(
+            output_text="OpenAI generated summary.",
+            usage=SimpleNamespace(input_tokens=120, output_tokens=30),
+            status="completed",
+        )
+    )
+    ai_manager = AIManager(
+        settings=AISettings(
+            provider="openai",
+            model="gpt-5.5",
+            api_key=SecretStr("sk-test"),
+        ),
+        provider=OpenAIProvider(
+            settings=AISettings(
+                provider="openai",
+                model="gpt-5.5",
+                api_key=SecretStr("sk-test"),
+            ),
+            client=client,
+            clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
+        ),
+    )
+
+    document = _service(pipeline=FakeContextPipeline(), ai_manager=ai_manager).preview_album(
+        artist="Nina Simone",
+        album="Pastel Blues",
+    )
+
+    assert document.generated_summary.text == "OpenAI generated summary."
+    assert document.generated_summary.provider == "openai"
+    assert document.generated_summary.model == "gpt-5.5"
+    assert document.generated_summary.prompt_name == "album_summary"
+    assert document.generated_summary.metadata == {
+        "prompt_tokens": 120,
+        "completion_tokens": 30,
+        "finish_reason": "completed",
+    }
+    assert client.responses.request["model"] == "gpt-5.5"
+    assert "Pastel Blues" in client.responses.request["input"]
+    assert (
+        "professionally crafted encyclopedic album description" in client.responses.request["input"]
+    )
+    assert "one fluent paragraph" in client.responses.request["input"]
+    assert "varied sentence openings" in client.responses.request["input"]
+    assert "ist den Genres ... zuzuordnen" in client.responses.request["input"]
+    assert "Never invent facts" in client.responses.request["input"]
+
+
+class FakeContextPipeline:
+    """Fake AlbumContext pipeline."""
 
     def __init__(self) -> None:
-        self.title = "Pastel Blues"
-        self.parentTitle = "Nina Simone"
-        self.summary = "Current Plex summary"
-        self.year = 1965
-        self.genres = [FakeGenre("Jazz"), FakeGenre("Soul")]
+        """Create a fake pipeline."""
+        self.received: tuple[str, str] | None = None
+
+    def collect_album_context(self, *, artist: str, album: str) -> AlbumContext:
+        """Return one album context."""
+        self.received = (artist, album)
+        return _album_context()
 
 
-class FakeArtist:
-    """Fake Plex artist."""
+class FailingContextPipeline:
+    """Fake failing context pipeline."""
 
-    title = "Nina Simone"
-
-    def albums(self) -> list[FakeAlbum]:
-        """Return fake albums."""
-        return [FakeAlbum()]
-
-
-class FakeSection:
-    """Fake Plex music section."""
-
-    type = "artist"
-
-    def all(self) -> list[FakeArtist]:
-        """Return fake artists."""
-        return [FakeArtist()]
+    def collect_album_context(self, *, artist: str, album: str) -> AlbumContext:
+        """Raise a context collection error."""
+        del artist, album
+        raise EnrichmentPipelineError("No Plex album found")
 
 
-class FakeLibrary:
-    """Fake Plex library accessor."""
+class FakeAIManager:
+    """Fake AI manager."""
 
-    def sections(self) -> list[FakeSection]:
-        """Return fake sections."""
-        return [FakeSection()]
+    def __init__(self) -> None:
+        """Create a fake AI manager."""
+        self.received: AlbumContext | None = None
+        self.prompt: RenderedPrompt | None = None
+        self.prompt_name: str = "album_summary"
 
-
-class FakePlexServer:
-    """Fake Plex server."""
-
-    def __init__(self, url: str, token: str) -> None:
-        self.url = url
-        self.token = token
-        self.library = FakeLibrary()
-
-
-class FakePipeline:
-    """Fake enrichment pipeline."""
-
-    def enrich_album(
+    def render_album_summary_prompt(
         self,
+        context: AlbumContext,
         *,
-        artist: str,
-        album: str,
-        year: int | None = None,
-        summary: str | None = None,
-    ) -> AlbumMetadataDocument:
-        assert artist == "Nina Simone"
-        assert album == "Pastel Blues"
-        assert year == 1965
-        assert summary == "Current Plex summary"
-        return AlbumMetadataDocument(
-            plex=PlexAlbumMetadata(
-                artist=artist,
-                album=album,
-                year=year,
-                summary=summary,
-            ),
-            musicbrainz=MusicBrainzEnrichmentMetadata(
-                matched=True,
-                confidence=95,
-                artist_mbid="artist-mbid",
-                release_group_mbid="release-group-mbid",
-                release_mbid="release-mbid",
-                release_date="1965-10",
-                primary_type="Album",
-                genres=["jazz", "soul"],
-                tags=["blues"],
-            ),
-            metadata=AlbumMetadata(
-                artist=artist,
-                album=album,
-                year=year,
-                genres=["jazz", "soul"],
-                summary=None,
-                sources=["plex", "musicbrainz"],
-                confidence=95,
-            ),
-        )
+        prompt_name: str = "album_summary",
+    ) -> RenderedPrompt:
+        """Return a rendered prompt."""
+        self.received = context
+        self.prompt_name = prompt_name
+        return _rendered_prompt(name=prompt_name)
+
+    def generate_album_summary_from_prompt(self, prompt: RenderedPrompt) -> GeneratedSummary:
+        """Return generated summary."""
+        self.prompt = prompt
+        return _generated_summary()
 
 
-class FailingPipeline:
-    """Fake failing enrichment pipeline."""
+class FailingAIManager:
+    """Fake failing AI manager."""
 
-    def enrich_album(self, **kwargs: Any) -> AlbumMetadataDocument:
-        """Raise a provider failure."""
-        del kwargs
-        raise RuntimeError("MusicBrainz unavailable")
+    def render_album_summary_prompt(self, context: AlbumContext) -> RenderedPrompt:
+        """Return a rendered prompt."""
+        del context
+        return _rendered_prompt()
+
+    def generate_album_summary_from_prompt(self, prompt: RenderedPrompt) -> GeneratedSummary:
+        """Raise an AI generation error."""
+        del prompt
+        raise RuntimeError("AI unavailable")
 
 
-def _service(pipeline: object) -> EnrichmentPreviewService:
+class FakeOpenAIClient:
+    """Fake OpenAI SDK client."""
+
+    def __init__(self, response: object) -> None:
+        """Create a fake client."""
+        self.responses = FakeOpenAIResponses(response)
+
+
+class FakeOpenAIResponses:
+    """Fake OpenAI responses resource."""
+
+    def __init__(self, response: object) -> None:
+        """Create fake responses."""
+        self._response = response
+        self.request: dict[str, str] = {}
+
+    def create(self, *, model: str, input: str) -> object:  # noqa: A002
+        """Return the fake response."""
+        self.request = {"model": model, "input": input}
+        return self._response
+
+
+def _service(
+    *,
+    pipeline: object,
+    ai_manager: object,
+) -> EnrichmentPreviewService:
+    """Create a preview service with fakes."""
     url = TypeAdapter(AnyHttpUrl).validate_python("http://localhost:32400")
-    return EnrichmentPreviewService(url, SecretStr("secret-token"), pipeline=pipeline)  # type: ignore[arg-type]
-
-
-def test_preview_service_reads_plex_album_and_enrichment(monkeypatch) -> None:
-    monkeypatch.setattr("plex_music_enhancer.services.preview.PlexServer", FakePlexServer)
-
-    document = _service(FakePipeline()).preview_album(
-        artist="Nina Simone",
-        album="Pastel Blues",
+    return EnrichmentPreviewService(
+        url,
+        SecretStr("secret-token"),
+        pipeline=pipeline,  # type: ignore[arg-type]
+        ai_manager=ai_manager,  # type: ignore[arg-type]
     )
 
-    assert document.plex.title == "Pastel Blues"
-    assert document.plex.artist == "Nina Simone"
-    assert document.plex.current_summary == "Current Plex summary"
-    assert document.plex.year == 1965
-    assert document.plex.genres == ["Jazz", "Soul"]
-    assert document.provider.reachable is True
-    assert document.provider.match_found is True
-    assert document.provider.metadata_available is True
-    assert document.ready_for_ai_enrichment is True
 
-
-def test_preview_service_reports_provider_failure_without_modifying_plex(monkeypatch) -> None:
-    monkeypatch.setattr("plex_music_enhancer.services.preview.PlexServer", FakePlexServer)
-
-    document = _service(FailingPipeline()).preview_album(
-        artist="Nina Simone",
-        album="Pastel Blues",
+def _album_context() -> AlbumContext:
+    """Return a complete album context fixture."""
+    return AlbumContext(
+        plex=PlexAlbumContext(
+            rating_key="42",
+            artist="Nina Simone",
+            album="Pastel Blues",
+            year=1965,
+            summary="Current Plex summary",
+            genres=["Jazz", "Soul"],
+            styles=[],
+            moods=[],
+        ),
+        musicbrainz=MusicBrainzAlbumContext(
+            artist_mbid="artist-mbid",
+            release_group_mbid="release-group-mbid",
+            release_mbid="release-mbid",
+            release_date="1965-10",
+            genres=["jazz"],
+            tags=["blues"],
+            confidence=96,
+        ),
+        wikipedia=WikipediaAlbumContext(
+            language="en",
+            title="Pastel Blues",
+            extract="Wikipedia summary",
+            page_url="https://en.wikipedia.org/wiki/Pastel_Blues",
+            thumbnail_url=None,
+        ),
+        pipeline=PipelineContext(
+            collected_sources=["plex", "musicbrainz", "wikipedia"],
+            missing_fields=[],
+            warnings=[],
+            ready_for_generation=True,
+        ),
     )
 
-    assert document.provider.reachable is False
-    assert document.provider.match_found is False
-    assert document.provider.metadata_available is False
-    assert document.provider.error == "MusicBrainz unavailable"
-    assert document.ready_for_ai_enrichment is False
+
+def _generated_summary() -> GeneratedSummary:
+    """Return a generated summary fixture."""
+    return GeneratedSummary(
+        language="en",
+        text=DUMMY_SUMMARY_TEXT,
+        provider="dummy",
+        model="dummy-v1",
+        prompt_name="dummy_album_summary",
+        prompt_version="1.0",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        confidence=1.0,
+        source_count=3,
+        metadata={"artist": "Nina Simone", "album": "Pastel Blues"},
+    )
+
+
+def _rendered_prompt(name: str = "album_summary") -> RenderedPrompt:
+    """Return a rendered prompt fixture."""
+    return RenderedPrompt(
+        name=name,
+        version="1.0",
+        rendered_text="Artist: Nina Simone\nAlbum: Pastel Blues\nLanguage: de\n",
+        variables={
+            "artist": "Nina Simone",
+            "album": "Pastel Blues",
+            "language": "de",
+        },
+        template="Artist: {{artist}}\nAlbum: {{album}}\nLanguage: {{language}}\n",
+    )

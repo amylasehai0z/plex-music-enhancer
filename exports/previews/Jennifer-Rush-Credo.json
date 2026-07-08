@@ -1,0 +1,93 @@
+{
+  "context": {
+    "plex": {
+      "rating_key": "5069",
+      "artist": "Jennifer Rush",
+      "album": "Credo",
+      "year": 1997,
+      "summary": null,
+      "genres": [
+        "Pop/Rock"
+      ],
+      "styles": [
+        "Club/Dance",
+        "Adult Contemporary",
+        "Contemporary Pop/Rock",
+        "Dance-Pop"
+      ],
+      "moods": [
+        "Sensual",
+        "Romantic",
+        "Relaxed",
+        "Agreeable",
+        "Striding"
+      ]
+    },
+    "musicbrainz": {
+      "artist_mbid": "0a92c550-20c7-43bc-98ed-777e13c54dff",
+      "release_group_mbid": "b5ca6304-7eff-3295-80c3-e0c1f6c1db18",
+      "release_mbid": "a5556457-2e92-33ec-b2f8-dea10ad41378",
+      "release_date": "1997-03-21",
+      "genres": [
+        "electronic",
+        "pop"
+      ],
+      "tags": [
+        "electronic",
+        "pop"
+      ],
+      "confidence": 100
+    },
+    "wikipedia": {
+      "language": "en",
+      "title": "Credo (Jennifer Rush album)",
+      "extract": "Credo is the eighth studio album by American singer Jennifer Rush. It was released by EMI Records on March 21, 1997. Rush worked with gospel and African choirs on the album who backed her on three of the tracks. Chiefly produced by Nick Patrick, eight of the eleven songs on Credo are cover versions, with two original songs co-written by Rush. Notable songs featured on the album are renditions of Cheap Trick's \"The Flame\" (1988) and \"The Places You Find Love,\" originally recorded by Barbra Streisand in 1988 and then by Quincy Jones for his 1989 Back on the Block album, as well as a cover of John Farnham's 1987 Australian hit \"A Touch of Paradise.\"",
+      "page_url": "https://en.wikipedia.org/wiki/Credo_(Jennifer_Rush_album)",
+      "thumbnail_url": "https://upload.wikimedia.org/wikipedia/en/1/19/Credo_Jennifer_Rush.jpg"
+    },
+    "pipeline": {
+      "collected_sources": [
+        "plex",
+        "musicbrainz",
+        "wikipedia"
+      ],
+      "missing_fields": [
+        "plex.summary"
+      ],
+      "warnings": [],
+      "ready_for_generation": true
+    }
+  },
+  "rendered_prompt": {
+    "name": "album_summary",
+    "version": "1.0",
+    "rendered_text": "# Album Summary Prompt\n\nWrite an album description in de.\n\nRequirements:\n- Use an encyclopedic, neutral style.\n- Use only the supplied facts.\n- Never invent information.\n- Produce approximately 80-120 words.\n- Avoid bullet lists.\n- Avoid marketing language.\n- If the supplied information is insufficient, state only verifiable facts.\n\nArtist: Jennifer Rush\nAlbum: Credo\nGenres: electronic, pop\nRelease date: 1997-03-21\n\nCurrent Plex summary:\nNo current Plex summary.\n\nWikipedia extract:\nCredo is the eighth studio album by American singer Jennifer Rush. It was released by EMI Records on March 21, 1997. Rush worked with gospel and African choirs on the album who backed her on three of the tracks. Chiefly produced by Nick Patrick, eight of the eleven songs on Credo are cover versions, with two original songs co-written by Rush. Notable songs featured on the album are renditions of Cheap Trick's \"The Flame\" (1988) and \"The Places You Find Love,\" originally recorded by Barbra Streisand in 1988 and then by Quincy Jones for his 1989 Back on the Block album, as well as a cover of John Farnham's 1987 Australian hit \"A Touch of Paradise.\"\n\nReturn only the finished German album description.\n",
+    "variables": {
+      "artist": "Jennifer Rush",
+      "album": "Credo",
+      "genres": "electronic, pop",
+      "release_date": "1997-03-21",
+      "wikipedia_extract": "Credo is the eighth studio album by American singer Jennifer Rush. It was released by EMI Records on March 21, 1997. Rush worked with gospel and African choirs on the album who backed her on three of the tracks. Chiefly produced by Nick Patrick, eight of the eleven songs on Credo are cover versions, with two original songs co-written by Rush. Notable songs featured on the album are renditions of Cheap Trick's \"The Flame\" (1988) and \"The Places You Find Love,\" originally recorded by Barbra Streisand in 1988 and then by Quincy Jones for his 1989 Back on the Block album, as well as a cover of John Farnham's 1987 Australian hit \"A Touch of Paradise.\"",
+      "current_summary": "No current Plex summary.",
+      "language": "de"
+    },
+    "template": "# Album Summary Prompt\n\nWrite an album description in {{language}}.\n\nRequirements:\n- Use an encyclopedic, neutral style.\n- Use only the supplied facts.\n- Never invent information.\n- Produce approximately 80-120 words.\n- Avoid bullet lists.\n- Avoid marketing language.\n- If the supplied information is insufficient, state only verifiable facts.\n\nArtist: {{artist}}\nAlbum: {{album}}\nGenres: {{genres}}\nRelease date: {{release_date}}\n\nCurrent Plex summary:\n{{current_summary}}\n\nWikipedia extract:\n{{wikipedia_extract}}\n\nReturn only the finished German album description.\n"
+  },
+  "generated_summary": {
+    "language": "de",
+    "text": "Credo ist das achte Studioalbum der amerikanischen Sängerin Jennifer Rush. Es wurde am 21. März 1997 von EMI Records veröffentlicht und ist den Genres Electronic und Pop zuzuordnen. Das Album wurde überwiegend von Nick Patrick produziert. Auf drei Titeln wird Rush von Gospel- und afrikanischen Chören begleitet. Acht der elf Stücke sind Coverversionen; zwei Originalsongs wurden von Rush mitgeschrieben. Zu den auf dem Album enthaltenen bekannten Interpretationen zählen „The Flame“ von Cheap Trick, „The Places You Find Love“, zuvor unter anderem von Barbra Streisand und Quincy Jones aufgenommen, sowie „A Touch of Paradise“ von John Farnham.",
+    "provider": "openai",
+    "model": "gpt-5.5",
+    "prompt_name": "album_summary",
+    "prompt_version": "1.0",
+    "created_at": "2026-07-08T11:07:12.734770Z",
+    "confidence": 0.85,
+    "source_count": 4,
+    "metadata": {
+      "prompt_tokens": 276,
+      "completion_tokens": 208,
+      "finish_reason": "completed"
+    }
+  },
+  "generation_time_seconds": 6.878216500001145
+}

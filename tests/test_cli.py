@@ -2,19 +2,28 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import SecretStr
 from typer.testing import CliRunner
 
+from plex_music_enhancer.ai import GeneratedSummary
+from plex_music_enhancer.ai.dummy import DUMMY_SUMMARY_TEXT
+from plex_music_enhancer.apply import ApplyResult
+from plex_music_enhancer.batch import BatchAlbumCandidate, BatchReviewOptions, BatchReviewReport
 from plex_music_enhancer.cli import DiagnosticCheck, app
 from plex_music_enhancer.constants import __version__
 from plex_music_enhancer.enrichment import (
     AlbumContext,
+    ArtistContext,
     MusicBrainzAlbumContext,
+    MusicBrainzArtistContext,
     PipelineContext,
     PlexAlbumContext,
+    PlexArtistContext,
     WikipediaAlbumContext,
+    WikipediaArtistContext,
 )
 from plex_music_enhancer.plex import (
     AlbumAuditFinding,
@@ -37,16 +46,17 @@ from plex_music_enhancer.plex import (
     PlexCapabilityAnalysis,
     PlexScannerError,
 )
+from plex_music_enhancer.prompts import RenderedPrompt
+from plex_music_enhancer.review import QualityReport, ReviewDocument
 from plex_music_enhancer.services import (
     AlbumMetadata,
     AlbumMetadataDocument,
+    ArtistPreviewDocument,
     EnrichmentPreviewDocument,
     MatchResult,
     MusicBrainzEnrichmentMetadata,
     PlexAlbumMetadata,
-    PlexAlbumPreview,
     PreviewError,
-    ProviderPreviewStatus,
 )
 
 runner = CliRunner()
@@ -141,22 +151,157 @@ def _match_result() -> MatchResult:
 
 def _preview_document() -> EnrichmentPreviewDocument:
     return EnrichmentPreviewDocument(
-        plex=PlexAlbumPreview(
-            title="Pastel Blues",
-            artist="Nina Simone",
-            current_summary="Current Plex summary",
-            year=1965,
-            genres=["Jazz", "Soul"],
+        context=_album_context(),
+        rendered_prompt=RenderedPrompt(
+            name="album_summary",
+            version="1.0",
+            rendered_text="Artist: Nina Simone\nAlbum: Pastel Blues\nLanguage: de\n",
+            variables={
+                "artist": "Nina Simone",
+                "album": "Pastel Blues",
+                "language": "de",
+            },
+            template="Artist: {{artist}}\nAlbum: {{album}}\nLanguage: {{language}}\n",
         ),
-        provider=ProviderPreviewStatus(
-            name="MusicBrainz",
-            reachable=True,
-            match_found=True,
-            metadata_available=True,
+        generated_summary=GeneratedSummary(
+            language="en",
+            text=DUMMY_SUMMARY_TEXT,
+            provider="dummy",
+            model="dummy-v1",
+            prompt_name="dummy_album_summary",
+            prompt_version="1.0",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            confidence=1.0,
+            source_count=3,
+            metadata={"artist": "Nina Simone", "album": "Pastel Blues"},
         ),
-        metadata=_metadata_document(),
-        ready_for_ai_enrichment=True,
+        generation_time_seconds=0.123,
     )
+
+
+def _artist_preview_document() -> ArtistPreviewDocument:
+    return ArtistPreviewDocument(
+        context=ArtistContext(
+            plex=PlexArtistContext(
+                rating_key="100",
+                artist="Nina Simone",
+                summary="Current artist summary",
+                genres=["Jazz"],
+            ),
+            musicbrainz=MusicBrainzArtistContext(
+                artist_mbid="artist-mbid",
+                artist_name="Nina Simone",
+                genres=["jazz"],
+                confidence=100,
+            ),
+            wikipedia=WikipediaArtistContext(
+                language="de",
+                title="Nina Simone",
+                extract="Wikipedia biography",
+                page_url="https://de.wikipedia.org/wiki/Nina_Simone",
+            ),
+            pipeline=PipelineContext(
+                collected_sources=["plex", "musicbrainz", "wikipedia"],
+                missing_fields=[],
+                warnings=[],
+                ready_for_generation=True,
+            ),
+        ),
+        rendered_prompt=RenderedPrompt(
+            name="artist_summary",
+            version="1.0",
+            rendered_text="Artist: Nina Simone\nLanguage: de\n",
+            variables={"artist": "Nina Simone", "language": "de"},
+            template="Artist: {{artist}}\nLanguage: {{language}}\n",
+        ),
+        generated_summary=GeneratedSummary(
+            language="de",
+            text=_german_summary(),
+            provider="dummy",
+            model="dummy-v1",
+            prompt_name="artist_summary",
+            prompt_version="1.0",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            confidence=1.0,
+            source_count=3,
+            metadata={"artist": "Nina Simone"},
+        ),
+        generation_time_seconds=0.123,
+    )
+
+
+def _review_document(
+    *, status: str = "PASS", proposed_summary: str | None = None
+) -> ReviewDocument:
+    """Return a review document fixture."""
+    return ReviewDocument(
+        preview=_preview_document(),
+        current_summary="Aktuelle Plex-Zusammenfassung.",
+        proposed_summary=proposed_summary or _german_summary(),
+        diff=(
+            "--- current summary\n"
+            "+++ generated summary\n"
+            "-Aktuelle Plex-Zusammenfassung.\n"
+            "+Neue Zusammenfassung."
+        ),
+        quality=QualityReport(
+            status=status,  # type: ignore[arg-type]
+            checks={
+                "not_empty": status != "FAILED",
+                "language_is_german": True,
+                "length_in_range": status == "PASS",
+                "no_markdown": True,
+                "no_bullet_lists": True,
+                "no_placeholder_text": True,
+            },
+            warnings=[] if status == "PASS" else ["Needs review."],
+            failures=[] if status != "FAILED" else ["Summary is empty."],
+            word_count=90 if status == "PASS" else 0,
+        ),
+    )
+
+
+def _artist_review_document() -> ReviewDocument:
+    """Return an artist review document fixture."""
+    return ReviewDocument(
+        preview=_artist_preview_document(),
+        current_summary="Current artist summary",
+        proposed_summary=_german_summary(),
+        diff="--- current summary\n+++ generated summary\n",
+        quality=QualityReport(
+            status="PASS",
+            checks={
+                "not_empty": True,
+                "language_is_german": True,
+                "length_in_range": True,
+                "no_markdown": True,
+                "no_bullet_lists": True,
+                "no_placeholder_text": True,
+            },
+            warnings=[],
+            failures=[],
+            word_count=90,
+        ),
+    )
+
+
+def _german_summary() -> str:
+    """Return valid German summary fixture."""
+    words = [
+        "Das",
+        "Album",
+        "ist",
+        "eine",
+        "sachliche",
+        "Beschreibung",
+        "mit",
+        "verifizierbaren",
+        "Angaben",
+        "und",
+        "neutraler",
+        "Sprache",
+    ]
+    return " ".join(words[index % len(words)] for index in range(90)) + "."
 
 
 def test_version_command() -> None:
@@ -347,37 +492,245 @@ def test_match_command_reports_errors(monkeypatch) -> None:
     assert "MusicBrainz unavailable" in result.stdout
 
 
-def test_preview_command_renders_readiness(monkeypatch) -> None:
+def test_preview_command_renders_generated_summary(monkeypatch) -> None:
+    factory_calls: list[tuple[str | None, str | None]] = []
+
     class FakePreviewService:
         def preview_album(self, *, artist: str, album: str) -> EnrichmentPreviewDocument:
             assert artist == "Nina Simone"
             assert album == "Pastel Blues"
             return _preview_document()
 
-    monkeypatch.setenv("PLEX_ENHANCER_PLEX_URL", "http://localhost:32400")
-    monkeypatch.setenv("PLEX_ENHANCER_PLEX_TOKEN", "secret-token")
+    def fake_create_preview_service(
+        *,
+        provider_name: str | None = None,
+        model: str | None = None,
+    ) -> tuple[FakePreviewService, SecretStr]:
+        factory_calls.append((provider_name, model))
+        return FakePreviewService(), SecretStr("secret-token")
+
     monkeypatch.setattr(
-        "plex_music_enhancer.cli.EnrichmentPreviewService",
-        lambda url, token: FakePreviewService(),
+        "plex_music_enhancer.cli._create_preview_service",
+        fake_create_preview_service,
     )
 
     result = runner.invoke(
         app,
-        ["preview", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+        [
+            "preview",
+            "--artist",
+            "Nina Simone",
+            "--album",
+            "Pastel Blues",
+            "--provider",
+            "openai",
+            "--model",
+            "gpt-5.5",
+        ],
     )
 
     assert result.exit_code == 0
-    assert "Plex Album" in result.stdout
-    assert "Pastel Blues" in result.stdout
-    assert "Current Plex summary" in result.stdout
-    assert "Provider Checks" in result.stdout
-    assert "Provider reachable" in result.stdout
-    assert "Match found" in result.stdout
-    assert "Metadata available" in result.stdout
-    assert "artist-mbid" in result.stdout
-    assert "release-group-mbid" in result.stdout
-    assert "This album is ready for AI enrichment." in result.stdout
+    assert factory_calls == [("openai", "gpt-5.5")]
+    assert "AI" in result.stdout
+    assert "GENERATED SUMMARY" in result.stdout
+    assert "dummy" in result.stdout
+    assert "dummy-v1" in result.stdout
+    assert "Prompt version" in result.stdout
+    assert "1.0" in result.stdout
+    assert "deterministic placeholder summary" in result.stdout
+    assert "DummyProvider" in result.stdout
+    assert "MUSICBRAINZ" not in result.stdout
+    assert "PROMPT" not in result.stdout
+    assert "Token usage" not in result.stdout
     assert "secret-token" not in result.stdout
+
+
+def test_preview_artist_command_renders_generated_biography(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_artist(self, *, artist: str) -> ArtistPreviewDocument:
+            assert artist == "Nina Simone"
+            return _artist_preview_document()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(app, ["preview", "artist", "--artist", "Nina Simone"])
+
+    assert result.exit_code == 0
+    assert "GENERATED BIOGRAPHY" in result.stdout
+    assert "Nina Simone" in result.stdout
+    assert "MUSICBRAINZ" in result.stdout
+
+
+def test_preview_command_uses_translate_prompt(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_album(
+            self,
+            *,
+            artist: str,
+            album: str,
+            prompt_name: str = "album_summary",
+        ) -> EnrichmentPreviewDocument:
+            assert artist == "Nina Simone"
+            assert album == "Pastel Blues"
+            assert prompt_name == "album_translate"
+            document = _preview_document()
+            return document.model_copy(
+                update={
+                    "rendered_prompt": document.rendered_prompt.model_copy(
+                        update={"name": "album_translate"}
+                    )
+                }
+            )
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["preview", "--artist", "Nina Simone", "--album", "Pastel Blues", "--translate", "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert '"name": "album_translate"' in result.stdout
+
+
+def test_preview_command_uses_improve_prompt(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_album(
+            self,
+            *,
+            artist: str,
+            album: str,
+            prompt_name: str = "album_summary",
+        ) -> EnrichmentPreviewDocument:
+            del artist, album
+            assert prompt_name == "album_improve"
+            document = _preview_document()
+            return document.model_copy(
+                update={
+                    "rendered_prompt": document.rendered_prompt.model_copy(
+                        update={"name": "album_improve"}
+                    )
+                }
+            )
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["preview", "--artist", "Nina Simone", "--album", "Pastel Blues", "--improve", "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert '"name": "album_improve"' in result.stdout
+
+
+def test_preview_command_rejects_translate_and_improve_together() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "preview",
+            "--artist",
+            "Nina Simone",
+            "--album",
+            "Pastel Blues",
+            "--translate",
+            "--improve",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Choose either --translate or --improve" in result.stdout
+
+
+def test_preview_command_verbose_renders_diagnostics(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_album(self, *, artist: str, album: str) -> EnrichmentPreviewDocument:
+            del artist, album
+            return _preview_document()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["preview", "--artist", "Nina Simone", "--album", "Pastel Blues", "--verbose"],
+    )
+
+    assert result.exit_code == 0
+    assert "PLEX" in result.stdout
+    assert "MUSICBRAINZ" in result.stdout
+    assert "WIKIPEDIA" in result.stdout
+    assert "PROMPT" in result.stdout
+    assert "Current Plex summary" in result.stdout
+    assert "Match confidence" in result.stdout
+    assert "Article status" in result.stdout
+    assert "Prompt name" in result.stdout
+    assert "Variables used" in result.stdout
+    assert "Token usage" in result.stdout
+    assert "Generation time" in result.stdout
+    assert "release-group-mbid" in result.stdout
+
+
+def test_preview_command_prints_json(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_album(self, *, artist: str, album: str) -> EnrichmentPreviewDocument:
+            del artist, album
+            return _preview_document()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["preview", "--artist", "Nina Simone", "--album", "Pastel Blues", "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert '"context": {' in result.stdout
+    assert '"rendered_prompt": {' in result.stdout
+    assert '"generated_summary": {' in result.stdout
+    assert '"provider": "dummy"' in result.stdout
+    assert DUMMY_SUMMARY_TEXT in result.stdout
+
+
+def test_preview_command_saves_json(monkeypatch, tmp_path: Path) -> None:
+    class FakePreviewService:
+        def preview_album(self, *, artist: str, album: str) -> EnrichmentPreviewDocument:
+            del artist, album
+            return _preview_document()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["preview", "--artist", "Nina Simone", "--album", "Pastel Blues", "--save"],
+    )
+
+    export_path = Path("exports/previews/Nina-Simone-Pastel-Blues.json")
+    exported = export_path.read_text(encoding="utf-8")
+    assert result.exit_code == 0
+    assert export_path.exists()
+    assert '"context": {' in exported
+    assert '"rendered_prompt": {' in exported
+    assert '"generated_summary": {' in exported
+    assert "Saved preview JSON" in result.stdout
 
 
 def test_preview_command_reports_errors(monkeypatch) -> None:
@@ -386,11 +739,9 @@ def test_preview_command_reports_errors(monkeypatch) -> None:
             del artist, album
             raise PreviewError("No Plex album found with token secret-token")
 
-    monkeypatch.setenv("PLEX_ENHANCER_PLEX_URL", "http://localhost:32400")
-    monkeypatch.setenv("PLEX_ENHANCER_PLEX_TOKEN", "secret-token")
     monkeypatch.setattr(
-        "plex_music_enhancer.cli.EnrichmentPreviewService",
-        lambda url, token: FakePreviewService(),
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
     )
 
     result = runner.invoke(
@@ -402,6 +753,358 @@ def test_preview_command_reports_errors(monkeypatch) -> None:
     assert "Unable to preview album enrichment" in result.stdout
     assert "REDACTED" in result.stdout
     assert "secret-token" not in result.stdout
+
+
+def test_review_command_apply_reports_not_implemented(monkeypatch) -> None:
+    class FakeReviewService:
+        def create_review(self, *, artist: str, album: str) -> ReviewDocument:
+            assert artist == "Nina Simone"
+            assert album == "Pastel Blues"
+            return _review_document(status="PASS")
+
+        def update_summary(self, document: ReviewDocument, edited_summary: str) -> ReviewDocument:
+            del document, edited_summary
+            raise AssertionError("update_summary should not be called")
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_review_service",
+        lambda provider_name=None, model=None: (FakeReviewService(), SecretStr("secret-token")),
+    )
+    monkeypatch.setattr("plex_music_enhancer.cli._review_choice", lambda: "A")
+
+    result = runner.invoke(
+        app,
+        ["review", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 0
+    assert "CURRENT SUMMARY" in result.stdout
+    assert "GENERATED SUMMARY" in result.stdout
+    assert "UNIFIED DIFF" in result.stdout
+    assert "PASS" in result.stdout
+    assert "Apply workflow not implemented yet." in result.stdout
+
+
+def test_review_artist_command_prints_json(monkeypatch) -> None:
+    class FakeReviewService:
+        def create_artist_review(self, *, artist: str) -> ReviewDocument:
+            assert artist == "Nina Simone"
+            return _artist_review_document()
+
+        def update_summary(self, document: ReviewDocument, edited_summary: str) -> ReviewDocument:
+            del document, edited_summary
+            raise AssertionError("update_summary should not be called")
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_review_service",
+        lambda provider_name=None, model=None: (FakeReviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(app, ["review", "artist", "--artist", "Nina Simone", "--json"])
+
+    assert result.exit_code == 0
+    assert '"artist": "Nina Simone"' in result.stdout
+    assert '"prompt_name": "artist_summary"' in result.stdout
+
+
+def test_review_command_edit_then_skip(monkeypatch) -> None:
+    class FakeReviewService:
+        def __init__(self) -> None:
+            self.edited_summary: str | None = None
+
+        def create_review(self, *, artist: str, album: str) -> ReviewDocument:
+            del artist, album
+            return _review_document(status="WARNINGS")
+
+        def update_summary(self, document: ReviewDocument, edited_summary: str) -> ReviewDocument:
+            del document
+            self.edited_summary = edited_summary
+            return _review_document(status="PASS", proposed_summary=edited_summary)
+
+    service = FakeReviewService()
+    choices = iter(["E", "S"])
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_review_service",
+        lambda provider_name=None, model=None: (service, SecretStr("secret-token")),
+    )
+    monkeypatch.setattr("plex_music_enhancer.cli._review_choice", lambda: next(choices))
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._open_multiline_editor",
+        lambda initial_text: _german_summary(),
+    )
+
+    result = runner.invoke(
+        app,
+        ["review", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 0
+    assert service.edited_summary == _german_summary()
+    assert "WARNINGS" in result.stdout
+    assert "PASS" in result.stdout
+    assert "Skipped. No changes were made." in result.stdout
+
+
+def test_review_command_blocks_apply_when_quality_failed(monkeypatch) -> None:
+    choices = iter(["A", "Q"])
+
+    class FakeReviewService:
+        def create_review(self, *, artist: str, album: str) -> ReviewDocument:
+            del artist, album
+            return _review_document(status="FAILED")
+
+        def update_summary(self, document: ReviewDocument, edited_summary: str) -> ReviewDocument:
+            del document, edited_summary
+            raise AssertionError("update_summary should not be called")
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_review_service",
+        lambda provider_name=None, model=None: (FakeReviewService(), SecretStr("secret-token")),
+    )
+    monkeypatch.setattr("plex_music_enhancer.cli._review_choice", lambda: next(choices))
+
+    result = runner.invoke(
+        app,
+        ["review", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 0
+    assert "FAILED" in result.stdout
+    assert "Generated summary must pass validation before Apply." in result.stdout
+    assert "Quit. No changes were made." in result.stdout
+
+
+def test_review_command_prints_json(monkeypatch) -> None:
+    class FakeReviewService:
+        def create_review(self, *, artist: str, album: str) -> ReviewDocument:
+            del artist, album
+            return _review_document(status="PASS")
+
+        def update_summary(self, document: ReviewDocument, edited_summary: str) -> ReviewDocument:
+            del document, edited_summary
+            raise AssertionError("update_summary should not be called")
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_review_service",
+        lambda provider_name=None, model=None: (FakeReviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["review", "--artist", "Nina Simone", "--album", "Pastel Blues", "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert '"current_summary": "Aktuelle Plex-Zusammenfassung."' in result.stdout
+    assert '"quality": {' in result.stdout
+    assert '"status": "PASS"' in result.stdout
+
+
+def test_apply_command_renders_success(monkeypatch) -> None:
+    class FakeApplyService:
+        def apply_album_summary(self, *, artist: str, album: str) -> ApplyResult:
+            assert artist == "Nina Simone"
+            assert album == "Pastel Blues"
+            return ApplyResult(
+                status="SUCCESS",
+                artist="Nina Simone",
+                album="Pastel Blues",
+                rating_key="42",
+                backup_created=True,
+                write_successful=True,
+                verification_passed=True,
+                audit_stored=True,
+                backup_path="exports/backups/backup.json",
+                audit_path="exports/audit/audit.json",
+                message="Summary written and verified successfully.",
+                review=_review_document(status="PASS"),
+            )
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_apply_service",
+        lambda provider_name=None, model=None: (FakeApplyService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["apply", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 0
+    assert "Backup created" in result.stdout
+    assert "Write successful" in result.stdout
+    assert "Verification passed" in result.stdout
+    assert "Audit stored" in result.stdout
+    assert "Audit log" in result.stdout
+
+
+def test_apply_artist_command_renders_success(monkeypatch) -> None:
+    class FakeApplyService:
+        def apply_artist_summary(self, *, artist: str) -> ApplyResult:
+            assert artist == "Nina Simone"
+            return ApplyResult(
+                status="SUCCESS",
+                artist="Nina Simone",
+                album="artist",
+                rating_key="100",
+                backup_created=True,
+                write_successful=True,
+                verification_passed=True,
+                audit_stored=True,
+                backup_path="exports/backups/backup.json",
+                audit_path="exports/audit/audit.json",
+                message="Summary written and verified successfully.",
+                review=_artist_review_document(),
+            )
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_apply_service",
+        lambda provider_name=None, model=None: (FakeApplyService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(app, ["apply", "artist", "--artist", "Nina Simone"])
+
+    assert result.exit_code == 0
+    assert "Backup created" in result.stdout
+    assert "Write successful" in result.stdout
+    assert "Verification passed" in result.stdout
+
+
+def test_apply_command_exits_nonzero_on_failed_verification(monkeypatch) -> None:
+    class FakeApplyService:
+        def apply_album_summary(self, *, artist: str, album: str) -> ApplyResult:
+            del artist, album
+            return ApplyResult(
+                status="FAILED",
+                artist="Nina Simone",
+                album="Pastel Blues",
+                rating_key="42",
+                backup_created=True,
+                write_successful=True,
+                verification_passed=False,
+                audit_stored=True,
+                backup_path="exports/backups/backup.json",
+                audit_path="exports/audit/audit.json",
+                message="Summary write completed, but verification failed after reload.",
+                review=_review_document(status="PASS"),
+            )
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_apply_service",
+        lambda provider_name=None, model=None: (FakeApplyService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["apply", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 1
+    assert "FAILED" in result.stdout
+    assert "verification failed" in result.stdout
+
+
+def test_batch_review_command_renders_summary(monkeypatch) -> None:
+    class FakeBatchReviewService:
+        def review_albums(self, *, options: BatchReviewOptions, display, decide, edit):
+            assert options.library == "Music"
+            assert options.missing_only is True
+            assert options.limit == 2
+            assert options.resume is True
+            assert display is not None
+            assert decide is not None
+            assert edit is not None
+            return BatchReviewReport(
+                processed=2,
+                applied=1,
+                skipped=1,
+                failed=0,
+                job_path="exports/jobs/batch-review-Music-missing.json",
+            )
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_batch_review_service",
+        lambda provider_name=None, model=None: (
+            FakeBatchReviewService(),
+            SecretStr("secret-token"),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "batch",
+            "review",
+            "--library",
+            "Music",
+            "--missing-only",
+            "--limit",
+            "2",
+            "--resume",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Batch Review Summary" in result.stdout
+    assert "Processed" in result.stdout
+    assert "Applied" in result.stdout
+    assert "Skipped" in result.stdout
+
+
+def test_plan_command_renders_recommendations(monkeypatch) -> None:
+    class FakePlanningSource:
+        def scan_albums(self, *, library: str | None = None):
+            assert library == "Music"
+            return [
+                BatchAlbumCandidate(
+                    rating_key="42",
+                    library="Music",
+                    artist="Nina Simone",
+                    album="Pastel Blues",
+                    current_summary=None,
+                )
+            ]
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_planning_source",
+        lambda: (FakePlanningSource(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(app, ["plan", "--library", "Music"])
+
+    assert result.exit_code == 0
+    assert "Enrichment Plan" in result.stdout
+    assert "Pastel Blues" in result.stdout
+    assert "CREATE" in result.stdout
+
+
+def test_plan_command_prints_json(monkeypatch) -> None:
+    class FakePlanningSource:
+        def scan_albums(self, *, library: str | None = None):
+            del library
+            return [
+                BatchAlbumCandidate(
+                    rating_key="43",
+                    library="Music",
+                    artist="Nina Simone",
+                    album="Wild Is the Wind",
+                    current_summary=(
+                        "The album is an English summary with enough language markers "
+                        "and a clear tone."
+                    ),
+                )
+            ]
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_planning_source",
+        lambda: (FakePlanningSource(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(app, ["plan", "--json"])
+
+    assert result.exit_code == 0
+    assert '"action": "TRANSLATE"' in result.stdout
+    assert '"language": "english"' in result.stdout
 
 
 def test_capabilities_exports_json(monkeypatch, tmp_path: Path) -> None:

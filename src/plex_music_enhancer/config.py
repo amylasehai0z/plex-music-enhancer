@@ -6,7 +6,7 @@ from functools import lru_cache
 from os import environ
 from typing import Annotated
 
-from pydantic import AnyHttpUrl, BeforeValidator, Field, SecretStr
+from pydantic import AnyHttpUrl, BaseModel, BeforeValidator, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,42 @@ def _strip_trailing_slash(value: object) -> object:
 NormalizedHttpUrl = Annotated[AnyHttpUrl, BeforeValidator(_strip_trailing_slash)]
 
 
+class AISettings(BaseModel):
+    """AI provider configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    provider: str = Field(
+        default="dummy",
+        description="Configured AI provider name.",
+    )
+    model: str = Field(
+        default="gpt-5.5",
+        description="Configured AI model name.",
+    )
+    api_key: SecretStr | None = Field(
+        default=None,
+        description="Optional AI provider API key.",
+    )
+    timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=300,
+        description="Timeout, in seconds, for AI provider requests.",
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+        description="Maximum retries for transient AI provider failures.",
+    )
+    max_prompt_characters: int = Field(
+        default=20000,
+        gt=0,
+        description="Maximum rendered prompt length sent to AI providers.",
+    )
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and `.env` files."""
 
@@ -27,6 +63,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         env_prefix="PLEX_ENHANCER_",
+        env_nested_delimiter="__",
         extra="ignore",
         case_sensitive=False,
     )
@@ -49,6 +86,7 @@ class Settings(BaseSettings):
         default="INFO",
         description="Standard Python log level.",
     )
+    ai: AISettings = Field(default_factory=AISettings)
 
     def __init__(self, **values: object) -> None:
         """Create settings with deterministic dotenv behavior during tests."""
