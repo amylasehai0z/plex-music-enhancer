@@ -29,8 +29,89 @@ from plex_music_enhancer.plex import (
     PlexCapabilityAnalysis,
     PlexScannerError,
 )
+from plex_music_enhancer.services import (
+    AlbumMetadata,
+    AlbumMetadataDocument,
+    EnrichmentPreviewDocument,
+    MatchResult,
+    MusicBrainzEnrichmentMetadata,
+    PlexAlbumMetadata,
+    PlexAlbumPreview,
+    PreviewError,
+    ProviderPreviewStatus,
+)
 
 runner = CliRunner()
+
+
+def _metadata_document() -> AlbumMetadataDocument:
+    return AlbumMetadataDocument(
+        plex=PlexAlbumMetadata(
+            artist="Nina Simone",
+            album="Pastel Blues",
+            year=1965,
+            summary=None,
+        ),
+        musicbrainz=MusicBrainzEnrichmentMetadata(
+            matched=True,
+            confidence=96,
+            artist_mbid="artist-mbid",
+            release_group_mbid="release-group-mbid",
+            release_mbid="release-mbid",
+            release_date="1965-10",
+            primary_type="Album",
+            secondary_types=[],
+            genres=["jazz", "soul"],
+            tags=["blues"],
+        ),
+        metadata=AlbumMetadata(
+            artist="Nina Simone",
+            album="Pastel Blues",
+            year=1965,
+            genres=["jazz", "soul"],
+            summary=None,
+            sources=["plex", "musicbrainz"],
+            confidence=96,
+        ),
+    )
+
+
+def _match_result() -> MatchResult:
+    return MatchResult(
+        matched=True,
+        confidence=96,
+        artist_mbid="artist-mbid",
+        release_group_mbid="release-group-mbid",
+        release_mbid="release-mbid",
+        artist_name="Nina Simone",
+        album_title="Pastel Blues",
+        first_release_date="1965-10",
+        release_year=1965,
+        primary_type="Album",
+        secondary_types=["Compilation"],
+        score_breakdown={"album_similarity": 100.0},
+        warnings=["Release year is missing or distant from the requested year."],
+    )
+
+
+def _preview_document() -> EnrichmentPreviewDocument:
+    return EnrichmentPreviewDocument(
+        plex=PlexAlbumPreview(
+            title="Pastel Blues",
+            artist="Nina Simone",
+            current_summary="Current Plex summary",
+            year=1965,
+            genres=["Jazz", "Soul"],
+        ),
+        provider=ProviderPreviewStatus(
+            name="MusicBrainz",
+            reachable=True,
+            match_found=True,
+            metadata_available=True,
+        ),
+        metadata=_metadata_document(),
+        ready_for_ai_enrichment=True,
+    )
 
 
 def test_version_command() -> None:
@@ -127,6 +208,126 @@ def test_login_redacts_token_from_connection_errors(monkeypatch, tmp_path: Path)
     assert "REDACTED" in result.stdout
     assert "secret-token" not in result.stdout
     assert not Path(".env").exists()
+
+
+def test_match_command_renders_musicbrainz_match(monkeypatch) -> None:
+    class FakeMusicBrainzMatcher:
+        def match_album(self, *, artist_name: str, album_title: str) -> MatchResult:
+            assert artist_name == "Nina Simone"
+            assert album_title == "Pastel Blues"
+            return _match_result()
+
+    monkeypatch.setattr("plex_music_enhancer.cli.MusicBrainzMatcher", FakeMusicBrainzMatcher)
+
+    result = runner.invoke(
+        app,
+        ["match", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 0
+    assert "MusicBrainz Match" in result.stdout
+    assert "Nina Simone" in result.stdout
+    assert "Pastel Blues" in result.stdout
+    assert "96" in result.stdout
+    assert "artist-mbid" in result.stdout
+    assert "release-group-mbid" in result.stdout
+    assert "release-mbid" in result.stdout
+    assert "Compilation" in result.stdout
+    assert "Release year is missing" in result.stdout
+
+
+def test_match_command_prints_json(monkeypatch) -> None:
+    class FakeMusicBrainzMatcher:
+        def match_album(self, *, artist_name: str, album_title: str) -> MatchResult:
+            del artist_name, album_title
+            return _match_result()
+
+    monkeypatch.setattr("plex_music_enhancer.cli.MusicBrainzMatcher", FakeMusicBrainzMatcher)
+
+    result = runner.invoke(
+        app,
+        ["match", "--artist", "Nina Simone", "--album", "Pastel Blues", "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert '"matched": true' in result.stdout
+    assert '"release_group_mbid": "release-group-mbid"' in result.stdout
+    assert '"score_breakdown": {' in result.stdout
+
+
+def test_match_command_reports_errors(monkeypatch) -> None:
+    class FakeMusicBrainzMatcher:
+        def match_album(self, *, artist_name: str, album_title: str) -> MatchResult:
+            del artist_name, album_title
+            raise RuntimeError("MusicBrainz unavailable")
+
+    monkeypatch.setattr("plex_music_enhancer.cli.MusicBrainzMatcher", FakeMusicBrainzMatcher)
+
+    result = runner.invoke(
+        app,
+        ["match", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 1
+    assert "Unable to match MusicBrainz metadata" in result.stdout
+    assert "MusicBrainz unavailable" in result.stdout
+
+
+def test_preview_command_renders_readiness(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_album(self, *, artist: str, album: str) -> EnrichmentPreviewDocument:
+            assert artist == "Nina Simone"
+            assert album == "Pastel Blues"
+            return _preview_document()
+
+    monkeypatch.setenv("PLEX_ENHANCER_PLEX_URL", "http://localhost:32400")
+    monkeypatch.setenv("PLEX_ENHANCER_PLEX_TOKEN", "secret-token")
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli.EnrichmentPreviewService",
+        lambda url, token: FakePreviewService(),
+    )
+
+    result = runner.invoke(
+        app,
+        ["preview", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 0
+    assert "Plex Album" in result.stdout
+    assert "Pastel Blues" in result.stdout
+    assert "Current Plex summary" in result.stdout
+    assert "Provider Checks" in result.stdout
+    assert "Provider reachable" in result.stdout
+    assert "Match found" in result.stdout
+    assert "Metadata available" in result.stdout
+    assert "artist-mbid" in result.stdout
+    assert "release-group-mbid" in result.stdout
+    assert "This album is ready for AI enrichment." in result.stdout
+    assert "secret-token" not in result.stdout
+
+
+def test_preview_command_reports_errors(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_album(self, *, artist: str, album: str) -> EnrichmentPreviewDocument:
+            del artist, album
+            raise PreviewError("No Plex album found with token secret-token")
+
+    monkeypatch.setenv("PLEX_ENHANCER_PLEX_URL", "http://localhost:32400")
+    monkeypatch.setenv("PLEX_ENHANCER_PLEX_TOKEN", "secret-token")
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli.EnrichmentPreviewService",
+        lambda url, token: FakePreviewService(),
+    )
+
+    result = runner.invoke(
+        app,
+        ["preview", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 1
+    assert "Unable to preview album enrichment" in result.stdout
+    assert "REDACTED" in result.stdout
+    assert "secret-token" not in result.stdout
 
 
 def test_capabilities_exports_json(monkeypatch, tmp_path: Path) -> None:
@@ -350,6 +551,93 @@ def test_audit_exports_json(monkeypatch, tmp_path: Path) -> None:
         "  ]\n"
         "}\n"
     )
+
+
+def test_metadata_album_renders_report(monkeypatch) -> None:
+    class FakeMetadataEnrichmentPipeline:
+        def enrich_album(
+            self,
+            *,
+            artist: str,
+            album: str,
+            year: int | None = None,
+        ) -> AlbumMetadataDocument:
+            assert artist == "Nina Simone"
+            assert album == "Pastel Blues"
+            assert year is None
+            return _metadata_document()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli.MetadataEnrichmentPipeline",
+        FakeMetadataEnrichmentPipeline,
+    )
+
+    result = runner.invoke(
+        app,
+        ["metadata", "album", "--artist", "Nina Simone", "--album", "Pastel Blues"],
+    )
+
+    assert result.exit_code == 0
+    assert "PLEX" in result.stdout
+    assert "MUSICBRAINZ" in result.stdout
+    assert "NORMALIZED METADATA" in result.stdout
+    assert "release-group-mbid" in result.stdout
+    assert "jazz" in result.stdout
+
+
+def test_metadata_album_saves_json(monkeypatch, tmp_path: Path) -> None:
+    class FakeMetadataEnrichmentPipeline:
+        def enrich_album(
+            self,
+            *,
+            artist: str,
+            album: str,
+            year: int | None = None,
+        ) -> AlbumMetadataDocument:
+            del artist, album, year
+            return _metadata_document()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli.MetadataEnrichmentPipeline",
+        FakeMetadataEnrichmentPipeline,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["metadata", "album", "--artist", "Nina Simone", "--album", "Pastel Blues", "--save"],
+    )
+
+    assert result.exit_code == 0
+    assert "Saved metadata JSON" in result.stdout
+    assert Path("exports/metadata/Nina-Simone-Pastel-Blues.json").exists()
+
+
+def test_metadata_album_prints_json(monkeypatch) -> None:
+    class FakeMetadataEnrichmentPipeline:
+        def enrich_album(
+            self,
+            *,
+            artist: str,
+            album: str,
+            year: int | None = None,
+        ) -> AlbumMetadataDocument:
+            del artist, album, year
+            return _metadata_document()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli.MetadataEnrichmentPipeline",
+        FakeMetadataEnrichmentPipeline,
+    )
+
+    result = runner.invoke(
+        app,
+        ["metadata", "album", "--artist", "Nina Simone", "--album", "Pastel Blues", "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert '"release_group_mbid": "release-group-mbid"' in result.stdout
+    assert '"sources": [' in result.stdout
 
 
 def test_probe_write_reports_album_summary_dry_run(monkeypatch) -> None:
