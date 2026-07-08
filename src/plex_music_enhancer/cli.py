@@ -17,6 +17,11 @@ from rich.table import Table
 
 from plex_music_enhancer.config import Settings
 from plex_music_enhancer.constants import CLI_NAME, MINIMUM_PYTHON_VERSION, __version__
+from plex_music_enhancer.enrichment import (
+    AlbumContext,
+    EnrichmentPipeline,
+    EnrichmentPipelineError,
+)
 from plex_music_enhancer.logging import configure_logging
 from plex_music_enhancer.plex import (
     AlbumScanItem,
@@ -66,6 +71,8 @@ probe_app = typer.Typer(help="Probe Plex write capabilities safely.")
 app.add_typer(probe_app, name="probe")
 metadata_app = typer.Typer(help="Gather and normalize metadata without modifying Plex.")
 app.add_typer(metadata_app, name="metadata")
+context_app = typer.Typer(help="Collect normalized album context without modifying Plex.")
+app.add_typer(context_app, name="context")
 console = Console()
 
 
@@ -477,6 +484,40 @@ def album_metadata(
         console.print(f"[green]Saved metadata JSON to {export_path}[/green]")
 
 
+@context_app.command(name="album")
+def album_context(
+    artist: Annotated[str, typer.Option("--artist", help="Artist name.")],
+    album: Annotated[str, typer.Option("--album", help="Album title.")],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete album context as JSON."),
+    ] = False,
+    save: Annotated[
+        bool,
+        typer.Option("--save", help="Save album context JSON under exports/context/."),
+    ] = False,
+) -> None:
+    """Collect normalized context for one Plex album without modifying Plex."""
+    pipeline, token = _create_enrichment_pipeline()
+
+    try:
+        context = pipeline.collect_album_context(artist=artist, album=album)
+    except EnrichmentPipelineError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to collect album context:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(context.model_dump_json(indent=2))
+    else:
+        _render_album_context(context)
+
+    if save:
+        export_path = _context_export_path(artist, album)
+        _write_scan_export(export_path, context)
+        console.print(f"[green]Saved album context JSON to {export_path}[/green]")
+
+
 def _inspect_target(
     target: InspectTarget,
     *,
@@ -679,6 +720,31 @@ def _create_preview_service() -> tuple[EnrichmentPreviewService, SecretStr]:
         raise typer.Exit(code=1)
 
     return EnrichmentPreviewService(plex_url, plex_token), plex_token
+
+
+def _create_enrichment_pipeline() -> tuple[EnrichmentPipeline, SecretStr]:
+    """Create a configured album context pipeline or exit with an error."""
+    try:
+        settings = Settings()
+    except ValidationError as exc:
+        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
+        raise typer.Exit(code=1) from exc
+
+    if not settings.has_plex_configuration:
+        console.print(
+            "[red]Missing Plex configuration.[/red] "
+            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
+            "PLEX_ENHANCER_PLEX_TOKEN."
+        )
+        raise typer.Exit(code=1)
+
+    plex_url = settings.plex_url
+    plex_token = settings.plex_token
+    if plex_url is None or plex_token is None:
+        console.print("[red]Missing Plex URL or token.[/red]")
+        raise typer.Exit(code=1)
+
+    return EnrichmentPipeline(plex_url, plex_token), plex_token
 
 
 def _raise_scan_error(scan_target: str, exc: PlexScannerError, token: SecretStr) -> None:
@@ -962,6 +1028,59 @@ def _render_album_metadata_document(document: AlbumMetadataDocument) -> None:
     console.print(metadata)
 
 
+def _render_album_context(context: AlbumContext) -> None:
+    """Render normalized album context."""
+    console.rule("PLEX")
+    plex = Table(show_header=False)
+    plex.add_column("Field", style="bold")
+    plex.add_column("Value")
+    plex.add_row("RatingKey", context.plex.rating_key)
+    plex.add_row("Artist", context.plex.artist)
+    plex.add_row("Album", context.plex.album)
+    plex.add_row("Year", str(context.plex.year or ""))
+    plex.add_row("Summary", context.plex.summary or "")
+    plex.add_row("Genres", ", ".join(context.plex.genres))
+    plex.add_row("Styles", ", ".join(context.plex.styles))
+    plex.add_row("Moods", ", ".join(context.plex.moods))
+    console.print(plex)
+
+    console.rule("MUSICBRAINZ")
+    musicbrainz = Table(show_header=False)
+    musicbrainz.add_column("Field", style="bold")
+    musicbrainz.add_column("Value")
+    musicbrainz.add_row("Artist MBID", context.musicbrainz.artist_mbid or "")
+    musicbrainz.add_row("Release Group MBID", context.musicbrainz.release_group_mbid or "")
+    musicbrainz.add_row("Release MBID", context.musicbrainz.release_mbid or "")
+    musicbrainz.add_row("Release Date", context.musicbrainz.release_date or "")
+    musicbrainz.add_row("Genres", ", ".join(context.musicbrainz.genres))
+    musicbrainz.add_row("Tags", ", ".join(context.musicbrainz.tags))
+    musicbrainz.add_row("Confidence", str(context.musicbrainz.confidence))
+    console.print(musicbrainz)
+
+    console.rule("WIKIPEDIA")
+    wikipedia = Table(show_header=False)
+    wikipedia.add_column("Field", style="bold")
+    wikipedia.add_column("Value")
+    wikipedia.add_row("Language", context.wikipedia.language or "")
+    wikipedia.add_row("Title", context.wikipedia.title or "")
+    wikipedia.add_row("Extract", context.wikipedia.extract or "")
+    wikipedia.add_row("Page URL", context.wikipedia.page_url or "")
+    wikipedia.add_row("Thumbnail URL", context.wikipedia.thumbnail_url or "")
+    console.print(wikipedia)
+
+    console.rule("PIPELINE STATUS")
+    pipeline = Table(show_header=False)
+    pipeline.add_column("Field", style="bold")
+    pipeline.add_column("Value")
+    pipeline.add_row("Collected Sources", ", ".join(context.pipeline.collected_sources))
+    pipeline.add_row("Missing Fields", ", ".join(context.pipeline.missing_fields))
+    pipeline.add_row("Warnings", "\n".join(context.pipeline.warnings))
+    console.print(pipeline)
+
+    console.rule("READY FOR GENERATION")
+    console.print(_yes_no(context.pipeline.ready_for_generation))
+
+
 def _render_match_result(result: MatchResult) -> None:
     """Render a MusicBrainz match result."""
     table = Table(title="MusicBrainz Match", show_lines=False)
@@ -1183,6 +1302,12 @@ def _metadata_export_path(artist: str, album: str) -> Path:
     """Return the export path for saved album metadata."""
     filename = f"{_safe_export_segment(artist)}-{_safe_export_segment(album)}.json"
     return Path("exports") / "metadata" / filename
+
+
+def _context_export_path(artist: str, album: str) -> Path:
+    """Return the export path for saved album context."""
+    filename = f"{_safe_export_segment(artist)}-{_safe_export_segment(album)}.json"
+    return Path("exports") / "context" / filename
 
 
 def _safe_export_segment(value: str) -> str:
