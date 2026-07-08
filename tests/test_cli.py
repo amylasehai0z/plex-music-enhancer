@@ -311,6 +311,22 @@ def test_version_command() -> None:
     assert __version__ in result.stdout
 
 
+def test_root_help_includes_examples() -> None:
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "Examples" in result.stdout
+    assert "plex-enhancer doctor" in result.stdout
+
+
+def test_library_help_includes_examples() -> None:
+    result = runner.invoke(app, ["library", "--help"])
+
+    assert result.exit_code == 0
+    assert "Examples" in result.stdout
+    assert "plex-enhancer library plan" in result.stdout
+
+
 def test_doctor_reports_missing_configuration(monkeypatch) -> None:
     monkeypatch.delenv("PLEX_ENHANCER_PLEX_URL", raising=False)
     monkeypatch.delenv("PLEX_ENHANCER_PLEX_TOKEN", raising=False)
@@ -1560,6 +1576,7 @@ def test_scan_reports_missing_configuration(monkeypatch, tmp_path: Path) -> None
 
     assert result.exit_code == 1
     assert "Missing Plex configuration" in result.stdout
+    assert "plex-enhancer login" in result.stdout
 
 
 def test_scan_reports_scanner_errors_without_token(monkeypatch) -> None:
