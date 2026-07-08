@@ -1,83 +1,151 @@
 # Plex Music Enhancer
 
-Plex Music Enhancer is a Python CLI foundation for future Plex music metadata
-workflows. The first milestone intentionally focuses on production-ready project
-structure, configuration, diagnostics, and delivery tooling. Metadata enrichment
-is not implemented yet.
+Plex Music Enhancer is a production-minded CLI for auditing, planning, previewing,
+reviewing, and safely applying German music metadata summaries to Plex music
+libraries.
+
+The beta is designed for real Plex libraries with hundreds of albums. It keeps
+planning, preview, and review read-only, creates backups before writes, verifies
+applied summaries after reload, and stores audit records for every apply run.
 
 ## Features
 
-- Python 3.12+ package using a `src/` layout
-- Typer CLI with Rich diagnostics
-- Pydantic Settings configuration from environment variables or `.env`
-- Minimal Plex connectivity check
-- Ruff, Black, Pytest, pre-commit, GitHub Actions
-- Dockerfile and Docker Compose setup
+- Typer CLI with Rich reports and guided interactive review
+- Plex library scanning, inspection, audit, and capability diagnostics
+- Smart planner for `CREATE`, `TRANSLATE`, `IMPROVE`, `REVIEW`, and `SKIP`
+- MusicBrainz and Wikipedia metadata collection with local caching
+- Prompt engine with album create, translate, and improve templates
+- AI abstraction with Dummy and OpenAI providers
+- Safe apply workflow with backup, write, reload verification, and audit JSON
+- Batch and full-library review sessions with resume support
+- Ruff, Black, Pytest, pre-commit, GitHub Actions, Docker, and Compose
 
-## Quick Start
+## Requirements
+
+- Python 3.12+
+- Plex server URL and token
+- Optional OpenAI API key when `ai.provider=openai`
+
+## Installation
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install ".[dev]"
+python -m pip install ".[dev,ai,metadata]"
 ```
 
-Copy the example environment file and add your Plex details:
+## Configuration
+
+Interactive setup:
 
 ```bash
-cp .env.example .env
+plex-enhancer login
 ```
 
-Required settings:
+Environment variables:
 
 ```bash
 PLEX_ENHANCER_PLEX_URL=http://localhost:32400
 PLEX_ENHANCER_PLEX_TOKEN=your-plex-token
+PLEX_ENHANCER_AI__PROVIDER=dummy
 ```
 
-## CLI
-
-Print the installed version:
+OpenAI preview:
 
 ```bash
-plex-enhancer version
+PLEX_ENHANCER_AI__PROVIDER=openai
+PLEX_ENHANCER_AI__MODEL=gpt-5.5
+OPENAI_API_KEY=sk-...
 ```
 
-Run diagnostics:
+## Safe First Run
 
 ```bash
 plex-enhancer doctor
+plex-enhancer scan --export-json
+plex-enhancer audit --export-json
+plex-enhancer library plan --library "Music"
 ```
 
-The doctor command checks the Python version, validates configuration, verifies
-the Plex URL setting, attempts a Plex connection, and prints a Rich diagnostics
-table.
+These commands do not modify Plex.
 
-## Metadata Providers
+## Common Workflows
 
-The provider framework lives under `src/plex_music_enhancer/providers/` and is
-read-only. It gathers candidate metadata from external sources, normalizes it
-into Pydantic models, and does not write anything back to Plex.
+Preview one album without writing:
 
-- `MetadataProvider` defines the common provider interface:
-  `search_artist()`, `search_album()`, `get_artist_summary()`, and
-  `get_album_summary()`.
-- `MusicBrainzProvider` uses the official MusicBrainz web service for artist
-  and release-group lookup.
-- `WikipediaProvider` uses the official Wikipedia REST API for title search and
-  page summaries.
-- `ProviderManager` queries providers in order, merges the first useful values,
-  tracks source attribution, and returns unified `ArtistMetadata` or
-  `AlbumMetadata` models.
+```bash
+plex-enhancer preview --artist "Nina Simone" --album "Pastel Blues"
+plex-enhancer preview --artist "Nina Simone" --album "Pastel Blues" --translate
+plex-enhancer preview --artist "Nina Simone" --album "Pastel Blues" --improve
+```
 
-The normalized metadata models include `title`, `artist`, `summary`,
-`language`, `source`, and `confidence`. AI enrichment and Plex writes are
-intentionally outside this layer.
+Review and approve interactively:
+
+```bash
+plex-enhancer review --artist "Nina Simone" --album "Pastel Blues"
+```
+
+Apply one approved generated summary with backup and verification:
+
+```bash
+plex-enhancer apply --artist "Nina Simone" --album "Pastel Blues"
+```
+
+Process a full library:
+
+```bash
+plex-enhancer library plan --library "Music"
+plex-enhancer library review --library "Music"
+plex-enhancer library apply --library "Music"
+plex-enhancer library report --library "Music" --export-json
+```
+
+## Safety Model
+
+Read-only commands:
+
+- `doctor`
+- `scan`
+- `audit`
+- `plan`
+- `capabilities`
+- `match`
+- `metadata`
+- `context`
+- `preview`
+- `review`
+- `batch review` until the user chooses Apply
+- `library plan`
+- `library review`
+- `library resume`
+- `library report`
+
+Write commands:
+
+- `apply`
+- `batch review` only when Apply is chosen
+- `library apply`
+- `probe write --execute`, which performs a reversible verification write
+
+Before normal apply writes, the app stores a backup under `exports/backups/`,
+reloads the Plex object, verifies the expected summary, and writes an audit
+record under `exports/audit/`.
+
+## Documentation
+
+- [OpenAI setup](docs/openai.md)
+- [Prompt system](docs/prompts.md)
+- [Content quality](docs/content-quality.md)
+- [Planner](docs/planner.md)
+- [Review workflow](docs/review.md)
+- [Apply workflow](docs/apply.md)
+- [Batch workflow](docs/batch.md)
+- [Library workflow](docs/library-workflow.md)
 
 ## Development
 
-Run the test suite:
+Run tests:
 
 ```bash
 pytest
@@ -98,10 +166,8 @@ pre-commit install
 
 ## Docker
 
-Build and run the diagnostics command:
-
 ```bash
-docker compose run --rm plex-music-enhancer
+docker compose run --rm plex-music-enhancer doctor
 ```
 
 ## License

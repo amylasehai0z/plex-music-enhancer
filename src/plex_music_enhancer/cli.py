@@ -34,6 +34,13 @@ from plex_music_enhancer.enrichment import (
     EnrichmentPipeline,
     EnrichmentPipelineError,
 )
+from plex_music_enhancer.library import (
+    LibraryPlanReport,
+    LibraryReviewReport,
+    LibraryReviewStep,
+    LibraryWorkflowError,
+    LibraryWorkflowService,
+)
 from plex_music_enhancer.logging import configure_logging
 from plex_music_enhancer.planner import EnrichmentPlanner, PlanningReport
 from plex_music_enhancer.plex import (
@@ -69,45 +76,127 @@ from plex_music_enhancer.services import (
     PreviewError,
 )
 
+PLEX_CONFIGURATION_HELP = (
+    "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and " "PLEX_ENHANCER_PLEX_TOKEN."
+)
+
 app = typer.Typer(
     name=CLI_NAME,
     help="Production-grade tools for improving Plex music libraries.",
+    epilog=(
+        "Examples:\n"
+        "  plex-enhancer doctor\n"
+        "  plex-enhancer scan --export-json\n"
+        '  plex-enhancer preview --artist "Nina Simone" --album "Pastel Blues"\n'
+        '  plex-enhancer library plan --library "Music"'
+    ),
     no_args_is_help=True,
 )
 scan_app = typer.Typer(
     help="Scan Plex music library data without modifying Plex.",
+    epilog=(
+        "Examples:\n"
+        "  plex-enhancer scan\n"
+        "  plex-enhancer scan artists --export-json\n"
+        "  plex-enhancer scan albums --export-json"
+    ),
     invoke_without_command=True,
     no_args_is_help=False,
 )
 app.add_typer(scan_app, name="scan")
-inspect_app = typer.Typer(help="Inspect Plex metadata without modifying Plex.")
+inspect_app = typer.Typer(
+    help="Inspect Plex metadata without modifying Plex.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer inspect artist --name "Nina Simone"\n'
+        "  plex-enhancer inspect album --id 12345 --json\n"
+        '  plex-enhancer inspect track --name "Sinnerman" --save'
+    ),
+)
 app.add_typer(inspect_app, name="inspect")
-probe_app = typer.Typer(help="Probe Plex write capabilities safely.")
+probe_app = typer.Typer(
+    help="Probe Plex write capabilities safely.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer probe write --artist "Nina Simone" --album "Pastel Blues"\n'
+        '  plex-enhancer probe write --artist "Nina Simone" --album "Pastel Blues" --execute'
+    ),
+)
 app.add_typer(probe_app, name="probe")
-metadata_app = typer.Typer(help="Gather and normalize metadata without modifying Plex.")
+metadata_app = typer.Typer(
+    help="Gather and normalize metadata without modifying Plex.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer metadata album --artist "Nina Simone" --album "Pastel Blues"\n'
+        '  plex-enhancer metadata album --artist "Nina Simone" --album "Pastel Blues" --save'
+    ),
+)
 app.add_typer(metadata_app, name="metadata")
-context_app = typer.Typer(help="Collect normalized album context without modifying Plex.")
+context_app = typer.Typer(
+    help="Collect normalized album context without modifying Plex.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer context album --artist "Nina Simone" --album "Pastel Blues"\n'
+        '  plex-enhancer context album --artist "Nina Simone" --album "Pastel Blues" --json'
+    ),
+)
 app.add_typer(context_app, name="context")
 preview_app = typer.Typer(
     help="Preview generated metadata without modifying Plex.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer preview --artist "Nina Simone" --album "Pastel Blues"\n'
+        '  plex-enhancer preview --artist "Nina Simone" --album "Pastel Blues" --translate\n'
+        '  plex-enhancer preview artist --artist "Nina Simone"'
+    ),
     invoke_without_command=True,
     no_args_is_help=False,
 )
 app.add_typer(preview_app, name="preview")
 review_app = typer.Typer(
     help="Review generated metadata without modifying Plex.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer review --artist "Nina Simone" --album "Pastel Blues"\n'
+        '  plex-enhancer review --artist "Nina Simone" --album "Pastel Blues" --improve\n'
+        '  plex-enhancer review artist --artist "Nina Simone"'
+    ),
     invoke_without_command=True,
     no_args_is_help=False,
 )
 app.add_typer(review_app, name="review")
 apply_app = typer.Typer(
     help="Apply approved generated metadata safely.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer apply --artist "Nina Simone" --album "Pastel Blues"\n'
+        '  plex-enhancer apply --artist "Nina Simone" --album "Pastel Blues" --translate\n'
+        '  plex-enhancer apply artist --artist "Nina Simone"'
+    ),
     invoke_without_command=True,
     no_args_is_help=False,
 )
 app.add_typer(apply_app, name="apply")
-batch_app = typer.Typer(help="Process multiple albums in a guided session.")
+batch_app = typer.Typer(
+    help="Process multiple albums in a guided session.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer batch review --library "Music" --limit 25\n'
+        '  plex-enhancer batch review --library "Music" --all --resume'
+    ),
+)
 app.add_typer(batch_app, name="batch")
+library_app = typer.Typer(
+    help="Process an entire Plex music library interactively.",
+    epilog=(
+        "Examples:\n"
+        '  plex-enhancer library plan --library "Music"\n'
+        '  plex-enhancer library review --library "Music"\n'
+        '  plex-enhancer library apply --library "Music"\n'
+        '  plex-enhancer library report --library "Music" --export-json'
+    ),
+)
+app.add_typer(library_app, name="library")
 console = Console()
 
 
@@ -153,7 +242,8 @@ def audit(
     auditor, token = _create_metadata_auditor()
 
     try:
-        report = auditor.audit()
+        with console.status("Auditing Plex music libraries..."):
+            report = auditor.audit()
     except PlexAuditError as exc:
         message = _redact_secret(str(exc), token.get_secret_value())
         console.print(f"[red]Unable to audit Plex metadata:[/red] {message}")
@@ -182,7 +272,11 @@ def plan(
     source, token = _create_planning_source()
 
     try:
-        report = EnrichmentPlanner().plan_albums(source.scan_albums(library=library))
+        if json_output:
+            report = EnrichmentPlanner().plan_albums(source.scan_albums(library=library))
+        else:
+            with console.status("Planning album enrichment actions..."):
+                report = EnrichmentPlanner().plan_albums(source.scan_albums(library=library))
     except BatchReviewError as exc:
         message = _redact_secret(str(exc), token.get_secret_value())
         console.print(f"[red]Unable to plan enrichment:[/red] {message}")
@@ -200,7 +294,8 @@ def capabilities() -> None:
     analyzer, token = _create_capability_analyzer()
 
     try:
-        analysis = analyzer.analyze()
+        with console.status("Analyzing Plex metadata capabilities..."):
+            analysis = analyzer.analyze()
     except PlexCapabilityError as exc:
         message = _redact_secret(str(exc), token.get_secret_value())
         console.print(f"[red]Unable to analyze Plex capabilities:[/red] {message}")
@@ -623,6 +718,210 @@ def batch_review(
         raise typer.Exit(code=1)
 
 
+@library_app.command(name="plan")
+def library_plan(
+    library: Annotated[
+        str | None,
+        typer.Option("--library", help="Plex music library title to process."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the library plan as JSON."),
+    ] = False,
+) -> None:
+    """Plan a complete music library and group albums by workflow action."""
+    service, token = _create_library_workflow_service()
+
+    try:
+        if json_output:
+            report = service.plan_library(library=library)
+        else:
+            with console.status("Planning complete library workflow..."):
+                report = service.plan_library(library=library)
+    except LibraryWorkflowError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to plan library:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(report.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_library_plan(report)
+
+
+@library_app.command(name="review")
+def library_review(
+    library: Annotated[
+        str | None,
+        typer.Option("--library", help="Plex music library title to process."),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this library review."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this library review."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the final library review report as JSON."),
+    ] = False,
+) -> None:
+    """Review generated summaries for a complete library without writing to Plex."""
+    _run_library_review(
+        library=library,
+        provider=provider,
+        model=model,
+        resume=False,
+        json_output=json_output,
+    )
+
+
+@library_app.command(name="resume")
+def library_resume(
+    library: Annotated[
+        str | None,
+        typer.Option("--library", help="Plex music library title to process."),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this library review."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this library review."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the final library review report as JSON."),
+    ] = False,
+) -> None:
+    """Resume an interrupted library review session."""
+    _run_library_review(
+        library=library,
+        provider=provider,
+        model=model,
+        resume=True,
+        json_output=json_output,
+    )
+
+
+@library_app.command(name="apply")
+def library_apply(
+    library: Annotated[
+        str | None,
+        typer.Option("--library", help="Plex music library title to process."),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for service creation."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for service creation."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the library apply report as JSON."),
+    ] = False,
+) -> None:
+    """Apply every approved item from the saved library review session."""
+    service, token = _create_library_workflow_service(provider_name=provider, model=model)
+
+    try:
+        if json_output:
+            report = service.apply_approved(library=library)
+        else:
+            with console.status("Applying approved library review items..."):
+                report = service.apply_approved(library=library)
+    except LibraryWorkflowError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to apply library reviews:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(report.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_library_review_report(report)
+
+    if report.failed:
+        raise typer.Exit(code=1)
+
+
+@library_app.command(name="report")
+def library_report(
+    library: Annotated[
+        str | None,
+        typer.Option("--library", help="Plex music library title to process."),
+    ] = None,
+    export_json: Annotated[
+        bool,
+        typer.Option("--export-json", help="Export report JSON to exports/library/report.json."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the library report as JSON."),
+    ] = False,
+) -> None:
+    """Generate a summary report for the saved library workflow session."""
+    service, token = _create_library_workflow_service()
+
+    try:
+        if json_output:
+            report = service.session_report(library=library)
+        else:
+            with console.status("Loading library workflow report..."):
+                report = service.session_report(library=library)
+    except LibraryWorkflowError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to report library workflow:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if export_json:
+        export_path = Path("exports/library/report.json")
+        _write_scan_export(export_path, report)
+        console.print(f"[green]Exported library report to {export_path}[/green]")
+
+    if json_output:
+        console.print_json(report.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_library_review_report(report)
+
+
+def _run_library_review(
+    *,
+    library: str | None,
+    provider: str | None,
+    model: str | None,
+    resume: bool,
+    json_output: bool,
+) -> None:
+    """Run a library review or resume workflow."""
+    service, token = _create_library_workflow_service(provider_name=provider, model=model)
+
+    try:
+        report = service.review_library(
+            library=library,
+            resume=resume,
+            display=_render_library_review_step,
+            decide=_library_review_decision,
+            edit=_batch_edit_summary,
+        )
+    except LibraryWorkflowError as exc:
+        message = _redact_secret(str(exc), token.get_secret_value())
+        console.print(f"[red]Unable to run library review:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(report.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_library_review_report(report)
+
+    if report.failed:
+        raise typer.Exit(code=1)
+
+
 @scan_app.callback()
 def scan(
     ctx: typer.Context,
@@ -692,7 +991,8 @@ def albums(
     scanner, token = _create_plex_scanner()
 
     try:
-        scan_export = scanner.scan_albums()
+        with console.status("Scanning albums..."):
+            scan_export = scanner.scan_albums()
     except PlexScannerError as exc:
         _raise_scan_error("albums", exc, token)
 
@@ -954,7 +1254,8 @@ def _scan_libraries(*, export_json: bool) -> None:
     scanner, token = _create_plex_scanner()
 
     try:
-        scan_export = scanner.scan()
+        with console.status("Scanning Plex music libraries..."):
+            scan_export = scanner.scan()
     except PlexScannerError as exc:
         _raise_scan_error("libraries", exc, token)
 
@@ -968,125 +1269,35 @@ def _scan_libraries(*, export_json: bool) -> None:
 
 def _create_plex_scanner() -> tuple[PlexMusicScanner, SecretStr]:
     """Create a configured Plex scanner or exit with a user-facing error."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    plex_url, plex_token = _require_plex_configuration()
 
     return PlexMusicScanner(plex_url, plex_token), plex_token
 
 
 def _create_plex_inspector() -> tuple[PlexMetadataInspector, SecretStr]:
     """Create a configured Plex inspector or exit with a user-facing error."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    plex_url, plex_token = _require_plex_configuration()
 
     return PlexMetadataInspector(plex_url, plex_token), plex_token
 
 
 def _create_metadata_auditor() -> tuple[PlexMetadataAuditor, SecretStr]:
     """Create a configured Plex metadata auditor or exit with an error."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    plex_url, plex_token = _require_plex_configuration()
 
     return PlexMetadataAuditor(plex_url, plex_token), plex_token
 
 
 def _create_capability_analyzer() -> tuple[PlexCapabilityAnalyzer, SecretStr]:
     """Create a configured Plex capability analyzer or exit with an error."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    plex_url, plex_token = _require_plex_configuration()
 
     return PlexCapabilityAnalyzer(plex_url, plex_token), plex_token
 
 
 def _create_write_probe() -> tuple[PlexWriteProbe, SecretStr]:
     """Create a configured Plex write probe or exit with an error."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    plex_url, plex_token = _require_plex_configuration()
 
     return PlexWriteProbe(plex_url, plex_token), plex_token
 
@@ -1097,25 +1308,7 @@ def _create_preview_service(
     model: str | None = None,
 ) -> tuple[EnrichmentPreviewService, SecretStr]:
     """Create a configured enrichment preview service or exit with an error."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    settings, plex_url, plex_token = _require_settings_with_plex_configuration()
 
     ai_settings = settings.ai
     updates: dict[str, str] = {}
@@ -1151,25 +1344,7 @@ def _create_apply_service(
     model: str | None = None,
 ) -> tuple[ApplyService, SecretStr]:
     """Create a configured apply service or exit with an error."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    plex_url, plex_token = _require_plex_configuration()
 
     review_service, token = _create_review_service(provider_name=provider_name, model=model)
     return (
@@ -1188,25 +1363,7 @@ def _create_batch_review_service(
     model: str | None = None,
 ) -> tuple[BatchReviewService, SecretStr]:
     """Create a configured batch review service or exit with an error."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    plex_url, plex_token = _require_plex_configuration()
 
     review_service, token = _create_review_service(provider_name=provider_name, model=model)
     apply_service = ApplyService(
@@ -1222,33 +1379,50 @@ def _create_batch_review_service(
     return batch_service, token
 
 
+def _create_library_workflow_service(
+    *,
+    provider_name: str | None = None,
+    model: str | None = None,
+) -> tuple[LibraryWorkflowService, SecretStr]:
+    """Create a configured full-library workflow service or exit with an error."""
+    plex_url, plex_token = _require_plex_configuration()
+
+    review_service, token = _create_review_service(provider_name=provider_name, model=model)
+    apply_service = ApplyService(
+        review_service=review_service,
+        base_url=plex_url,
+        token=plex_token,
+    )
+    workflow_service = LibraryWorkflowService(
+        album_source=PlexBatchAlbumSource(plex_url, plex_token),
+        review_service=review_service,
+        apply_service=apply_service,
+    )
+    return workflow_service, token
+
+
 def _create_planning_source() -> tuple[PlexBatchAlbumSource, SecretStr]:
     """Create a configured Plex album source for planning."""
-    try:
-        settings = Settings()
-    except ValidationError as exc:
-        console.print(f"[red]Configuration error:[/red] {_format_validation_error(exc)}")
-        raise typer.Exit(code=1) from exc
-
-    if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
-        raise typer.Exit(code=1)
-
-    plex_url = settings.plex_url
-    plex_token = settings.plex_token
-    if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
-        raise typer.Exit(code=1)
+    plex_url, plex_token = _require_plex_configuration()
 
     return PlexBatchAlbumSource(plex_url, plex_token), plex_token
 
 
 def _create_enrichment_pipeline() -> tuple[EnrichmentPipeline, SecretStr]:
     """Create a configured album context pipeline or exit with an error."""
+    plex_url, plex_token = _require_plex_configuration()
+
+    return EnrichmentPipeline(plex_url, plex_token), plex_token
+
+
+def _require_plex_configuration() -> tuple[AnyHttpUrl, SecretStr]:
+    """Return required Plex configuration or exit with a consistent user error."""
+    _, plex_url, plex_token = _require_settings_with_plex_configuration()
+    return plex_url, plex_token
+
+
+def _require_settings_with_plex_configuration() -> tuple[Settings, AnyHttpUrl, SecretStr]:
+    """Return settings and required Plex values or exit with a consistent user error."""
     try:
         settings = Settings()
     except ValidationError as exc:
@@ -1256,20 +1430,16 @@ def _create_enrichment_pipeline() -> tuple[EnrichmentPipeline, SecretStr]:
         raise typer.Exit(code=1) from exc
 
     if not settings.has_plex_configuration:
-        console.print(
-            "[red]Missing Plex configuration.[/red] "
-            "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and "
-            "PLEX_ENHANCER_PLEX_TOKEN."
-        )
+        console.print(f"[red]Missing Plex configuration.[/red] {PLEX_CONFIGURATION_HELP}")
         raise typer.Exit(code=1)
 
     plex_url = settings.plex_url
     plex_token = settings.plex_token
     if plex_url is None or plex_token is None:
-        console.print("[red]Missing Plex URL or token.[/red]")
+        console.print(f"[red]Missing Plex URL or token.[/red] {PLEX_CONFIGURATION_HELP}")
         raise typer.Exit(code=1)
 
-    return EnrichmentPipeline(plex_url, plex_token), plex_token
+    return settings, plex_url, plex_token
 
 
 def _raise_scan_error(scan_target: str, exc: PlexScannerError, token: SecretStr) -> None:
@@ -1524,6 +1694,12 @@ def _render_apply_result(result: ApplyResult) -> None:
         _yes_no_plain(result.backup_created),
         result.backup_path or "",
     )
+    if result.backup is not None:
+        table.add_row(
+            "Previous summary length",
+            str(len(result.backup.previous_summary)),
+            "Stored before the Plex write.",
+        )
     table.add_row("Write successful", _yes_no_plain(result.write_successful), "")
     table.add_row("Verification passed", _yes_no_plain(result.verification_passed), "")
     table.add_row("Audit stored", _yes_no_plain(result.audit_stored), result.audit_path or "")
@@ -1564,11 +1740,89 @@ def _render_batch_review_step(step: BatchReviewStep) -> None:
     console.print(review.proposed_summary or "[dim]No generated summary.[/dim]")
 
 
+def _render_library_plan(report: LibraryPlanReport) -> None:
+    """Render a full-library plan grouped by action."""
+    table = Table(title="Library Plan")
+    table.add_column("Action", style="bold")
+    table.add_column("Albums", justify="right")
+    table.add_column("Estimated Time")
+
+    for group in report.groups:
+        table.add_row(
+            group.action.value,
+            str(group.count),
+            _format_duration(group.estimated_seconds),
+        )
+
+    console.print(table)
+    console.print(f"Total albums: [bold]{report.total_albums}[/bold]")
+    console.print(
+        "Estimated processing time: "
+        f"[bold]{_format_duration(report.estimated_processing_seconds)}[/bold]"
+    )
+
+
+def _render_library_review_step(step: LibraryReviewStep) -> None:
+    """Render one album in a full-library review session."""
+    console.rule("Library Review")
+    table = Table(show_header=False)
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("Artist", step.candidate.artist)
+    table.add_row("Album", step.candidate.album)
+    table.add_row("Planner decision", step.plan.action.value)
+    table.add_row("Quality score", str(step.plan.quality.quality_score))
+    table.add_row("Quality issues", ", ".join(issue.value for issue in step.plan.quality.issues))
+    console.print(table)
+
+    console.rule("Current summary")
+    console.print(step.review.current_summary or "[dim]No current summary.[/dim]")
+    console.rule("Generated summary")
+    console.print(step.review.proposed_summary or "[dim]No generated summary.[/dim]")
+
+
+def _render_library_review_report(report: LibraryReviewReport) -> None:
+    """Render a full-library workflow report."""
+    table = Table(title="Library Workflow Report", show_header=False)
+    table.add_column("Metric", style="bold")
+    table.add_column("Value")
+    table.add_row("Albums processed", str(report.albums_processed))
+    table.add_row("Created", str(report.created))
+    table.add_row("Translated", str(report.translated))
+    table.add_row("Improved", str(report.improved))
+    table.add_row("Skipped", str(report.skipped))
+    table.add_row("Approved", str(report.approved))
+    table.add_row("Applied", str(report.applied))
+    table.add_row("Failed", str(report.failed))
+    table.add_row("Average quality score", str(report.average_quality_score))
+    table.add_row("Average generation time", f"{report.average_generation_time_seconds:.2f}s")
+    table.add_row("Session", report.session_path)
+    console.print(table)
+
+    if report.quit_requested:
+        console.print(
+            "[yellow]Review paused. Use `plex-enhancer library resume` to continue.[/yellow]"
+        )
+
+
 def _batch_review_decision(step: BatchReviewStep) -> BatchDecision:
     """Prompt for one batch review decision."""
     del step
     choice = _review_choice()
     mapping = {
+        "A": "APPLY",
+        "E": "EDIT",
+        "S": "SKIP",
+        "Q": "QUIT",
+    }
+    return mapping.get(choice, "SKIP")
+
+
+def _library_review_decision(step: LibraryReviewStep) -> BatchDecision:
+    """Prompt for one library review decision."""
+    del step
+    choice = _review_choice()
+    mapping: dict[str, BatchDecision] = {
         "A": "APPLY",
         "E": "EDIT",
         "S": "SKIP",
@@ -1600,22 +1854,32 @@ def _render_batch_review_report(report: BatchReviewReport) -> None:
 def _render_planning_report(report: PlanningReport) -> None:
     """Render enrichment plans as a Rich table."""
     table = Table(title="Enrichment Plan", show_lines=False)
-    table.add_column("Album", style="bold")
-    table.add_column("Current language")
-    table.add_column("Current summary length", justify="right")
-    table.add_column("Recommended action")
-    table.add_column("Reason")
+    table.add_column("Album", style="bold", overflow="fold")
+    table.add_column("Language")
+    table.add_column("Words", justify="right")
+    table.add_column("Quality", justify="right")
+    table.add_column("Action")
+    table.add_column("Reason / Issues", overflow="fold")
 
     for album in report.albums:
         table.add_row(
             f"{album.artist} - {album.album}",
             album.plan.language,
             str(album.current_summary_words),
+            str(album.plan.quality.quality_score),
             album.plan.action.value,
-            album.plan.reason,
+            _planner_diagnostic(album.plan.reason, album.plan.quality.issues),
         )
 
     console.print(table)
+
+
+def _planner_diagnostic(reason: str, issues: object) -> str:
+    """Return compact planner reason and issue diagnostics."""
+    issue_values = [getattr(issue, "value", str(issue)) for issue in issues]
+    if not issue_values:
+        return reason
+    return f"{reason} Issues: {', '.join(issue_values)}"
 
 
 def _render_album_metadata_document(document: AlbumMetadataDocument) -> None:
@@ -1932,6 +2196,19 @@ def _yes_no(value: bool) -> str:
 def _yes_no_plain(value: bool) -> str:
     """Return a plain yes/no value."""
     return "yes" if value else "no"
+
+
+def _format_duration(seconds: int) -> str:
+    """Return a compact human-readable duration."""
+    minutes, remaining_seconds = divmod(seconds, 60)
+    if minutes == 0:
+        return f"{remaining_seconds}s"
+
+    hours, remaining_minutes = divmod(minutes, 60)
+    if hours == 0:
+        return f"{remaining_minutes}m {remaining_seconds}s"
+
+    return f"{hours}h {remaining_minutes}m"
 
 
 def _format_probe_status(status: str) -> str:
