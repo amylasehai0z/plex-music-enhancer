@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from re import search
 
+from plex_music_enhancer.planner import EnrichmentPlanner
 from plex_music_enhancer.review.diff import unified_summary_diff
 from plex_music_enhancer.review.models import QualityReport, ReviewDocument, ReviewLimits
 from plex_music_enhancer.services import (
@@ -25,10 +26,12 @@ class ReviewService:
         *,
         preview_service: EnrichmentPreviewService,
         limits: ReviewLimits | None = None,
+        planner: EnrichmentPlanner | None = None,
     ) -> None:
         """Create a review service."""
         self._preview_service = preview_service
         self._limits = limits or ReviewLimits()
+        self._planner = planner or EnrichmentPlanner()
 
     def create_review(
         self,
@@ -88,6 +91,7 @@ class ReviewService:
             diff=unified_summary_diff(current_summary, proposed_summary),
             quality=validate_summary_quality(proposed_summary, limits=self._limits),
             edited=edited,
+            plan=self._planner.plan_summary(current_summary),
         )
 
 

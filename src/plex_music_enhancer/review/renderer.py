@@ -18,9 +18,14 @@ class ReviewRenderer:
 
     def render(self, document: ReviewDocument) -> None:
         """Render current summary, generated summary, diff, and quality."""
+        generated_label = _generated_summary_label(document)
         self._console.rule("CURRENT SUMMARY")
         self._console.print(document.current_summary or "[dim]No current summary.[/dim]")
-        self._console.rule("GENERATED SUMMARY")
+        if document.plan is not None:
+            self.render_plan(document)
+        if generated_label == "TRANSLATED SUMMARY":
+            self._console.print("[bold]↓[/bold]")
+        self._console.rule(generated_label)
         self._console.print(document.proposed_summary or "[dim]No generated summary.[/dim]")
         self._console.rule("UNIFIED DIFF")
         self._console.print(Panel(document.diff or "No changes.", expand=False))
@@ -48,3 +53,28 @@ class ReviewRenderer:
             self._console.print(f"[red]{failure}[/red]")
         for warning in report.warnings:
             self._console.print(f"[yellow]{warning}[/yellow]")
+
+    def render_plan(self, document: ReviewDocument) -> None:
+        """Render current-summary content quality and planner recommendation."""
+        if document.plan is None:
+            return
+
+        plan = document.plan
+        table = Table(title="Content Quality", show_header=False)
+        table.add_column("Field", style="bold")
+        table.add_column("Value")
+        table.add_row("Quality score", str(plan.quality.quality_score))
+        table.add_row("Quality level", plan.quality.quality_level.value)
+        table.add_row("Detected issues", ", ".join(issue.value for issue in plan.quality.issues))
+        table.add_row("Recommended action", plan.action.value)
+        table.add_row("Reason", plan.reason)
+        self._console.print(table)
+
+
+def _generated_summary_label(document: ReviewDocument) -> str:
+    """Return the generated summary section label."""
+    prompt_name = document.preview.rendered_prompt.name
+    if prompt_name == "album_translate":
+        return "TRANSLATED SUMMARY"
+
+    return "GENERATED SUMMARY"

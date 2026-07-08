@@ -28,11 +28,14 @@ For each selected album, the command:
 
 1. Scans the selected Plex music library.
 2. Filters albums according to the requested options.
-3. Builds the same `AlbumContext` used by preview and review.
-4. Generates a summary through the configured AI provider.
-5. Runs quality validation.
-6. Displays the album, current summary, and generated summary.
-7. Prompts for a decision:
+3. Runs the planner against the current Plex summary.
+4. Invokes AI only for `CREATE`, `TRANSLATE`, and `IMPROVE`.
+5. Skips `SKIP` items automatically.
+6. Asks the user for `REVIEW` items without generating text automatically.
+7. Builds the same `AlbumContext` used by preview and review when generation is required.
+8. Runs quality validation.
+9. Displays the album, current summary, and generated summary.
+10. Prompts for a decision:
 
 ```text
 [A] Apply  [E] Edit  [S] Skip  [Q] Quit
@@ -41,6 +44,14 @@ For each selected album, the command:
 Choosing Apply reuses the existing apply workflow, including backup creation,
 Plex write, reload verification, and audit storage. Choosing Edit opens the
 configured terminal editor and validates the edited text before asking again.
+
+Planner actions map to prompts as follows:
+
+- `CREATE`: `album_summary`
+- `TRANSLATE`: `album_translate`
+- `IMPROVE`: `album_improve`
+- `REVIEW`: manual decision, no automatic AI call
+- `SKIP`: no AI call
 
 ## Progress And Resume
 

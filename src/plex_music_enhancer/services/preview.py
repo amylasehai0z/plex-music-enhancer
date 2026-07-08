@@ -11,6 +11,7 @@ from plex_music_enhancer.ai.manager import AIManager
 from plex_music_enhancer.ai.models import GeneratedSummary
 from plex_music_enhancer.enrichment.models import AlbumContext, ArtistContext
 from plex_music_enhancer.prompts.renderer import RenderedPrompt
+from plex_music_enhancer.translation import TranslationError, TranslationService
 
 
 class EnrichmentPreviewDocument(BaseModel):
@@ -98,6 +99,9 @@ class EnrichmentPreviewService:
         prompt_name: str = "album_summary",
     ) -> EnrichmentPreviewDocument:
         """Build album context and generate a preview summary without modifying Plex."""
+        if prompt_name == "album_translate":
+            return self._preview_album_translation(artist=artist, album=album)
+
         try:
             context = self._pipeline.collect_album_context(artist=artist, album=album)
             rendered_prompt = (
@@ -120,6 +124,31 @@ class EnrichmentPreviewService:
             rendered_prompt=rendered_prompt,
             generated_summary=generated_summary,
             generation_time_seconds=generation_time_seconds,
+        )
+
+    def _preview_album_translation(
+        self,
+        *,
+        artist: str,
+        album: str,
+    ) -> EnrichmentPreviewDocument:
+        """Build a translation preview using the translation engine."""
+        try:
+            document = TranslationService(
+                pipeline=self._pipeline,
+                ai_manager=self._ai_manager,
+            ).translate_album(artist=artist, album=album)
+        except TranslationError as exc:
+            raise PreviewError(str(exc)) from exc
+        except Exception as exc:
+            msg = str(exc) or "Unable to translate album summary."
+            raise PreviewError(msg) from exc
+
+        return EnrichmentPreviewDocument(
+            context=document.context,
+            rendered_prompt=document.rendered_prompt,
+            generated_summary=document.generated_summary,
+            generation_time_seconds=document.generation_time_seconds,
         )
 
     def preview_artist(self, *, artist: str) -> ArtistPreviewDocument:

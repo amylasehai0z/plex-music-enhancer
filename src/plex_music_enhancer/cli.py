@@ -1547,11 +1547,19 @@ def _render_batch_review_step(step: BatchReviewStep) -> None:
     table.add_row("RatingKey", step.candidate.rating_key)
     table.add_row("Recommended action", step.plan.action.value)
     table.add_row("Plan reason", step.plan.reason)
-    table.add_row("Quality", review.quality.status)
+    if review is not None:
+        table.add_row("Quality", review.quality.status)
     console.print(table)
 
     console.rule("Current summary")
-    console.print(review.current_summary or "[dim]No current summary.[/dim]")
+    current_summary = (
+        review.current_summary if review is not None else step.candidate.current_summary
+    )
+    console.print(current_summary or "[dim]No current summary.[/dim]")
+    if review is None:
+        console.print("[yellow]Manual review recommended. No AI output generated.[/yellow]")
+        return
+
     console.rule("Generated summary")
     console.print(review.proposed_summary or "[dim]No generated summary.[/dim]")
 
