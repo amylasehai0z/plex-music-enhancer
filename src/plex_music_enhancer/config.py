@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from os import environ
 from typing import Annotated
 
 from pydantic import AnyHttpUrl, BeforeValidator, Field, SecretStr
@@ -49,10 +50,22 @@ class Settings(BaseSettings):
         description="Standard Python log level.",
     )
 
+    def __init__(self, **values: object) -> None:
+        """Create settings with deterministic dotenv behavior during tests."""
+        if "_env_file" not in values and _running_under_pytest():
+            values["_env_file"] = None
+
+        super().__init__(**values)
+
     @property
     def has_plex_configuration(self) -> bool:
         """Return whether the required Plex connection settings are present."""
         return self.plex_url is not None and self.plex_token is not None
+
+
+def _running_under_pytest() -> bool:
+    """Return whether the current process is executing a pytest test case."""
+    return "PYTEST_CURRENT_TEST" in environ
 
 
 @lru_cache

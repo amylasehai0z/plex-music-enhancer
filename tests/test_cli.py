@@ -4,10 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import SecretStr
 from typer.testing import CliRunner
 
 from plex_music_enhancer.cli import DiagnosticCheck, app
 from plex_music_enhancer.constants import __version__
+from plex_music_enhancer.enrichment import (
+    AlbumContext,
+    MusicBrainzAlbumContext,
+    PipelineContext,
+    PlexAlbumContext,
+    WikipediaAlbumContext,
+)
 from plex_music_enhancer.plex import (
     AlbumAuditFinding,
     AlbumScanExport,
@@ -72,6 +80,43 @@ def _metadata_document() -> AlbumMetadataDocument:
             summary=None,
             sources=["plex", "musicbrainz"],
             confidence=96,
+        ),
+    )
+
+
+def _album_context() -> AlbumContext:
+    return AlbumContext(
+        plex=PlexAlbumContext(
+            rating_key="42",
+            artist="Nina Simone",
+            album="Pastel Blues",
+            year=1965,
+            summary="Current Plex summary",
+            genres=["Jazz", "Soul"],
+            styles=["Vocal Jazz"],
+            moods=["Melancholy"],
+        ),
+        musicbrainz=MusicBrainzAlbumContext(
+            artist_mbid="artist-mbid",
+            release_group_mbid="release-group-mbid",
+            release_mbid="release-mbid",
+            release_date="1965-10",
+            genres=["jazz"],
+            tags=["blues"],
+            confidence=96,
+        ),
+        wikipedia=WikipediaAlbumContext(
+            language="en",
+            title="Pastel Blues",
+            extract="Wikipedia summary",
+            page_url="https://en.wikipedia.org/wiki/Pastel_Blues",
+            thumbnail_url="https://example.test/pastel.jpg",
+        ),
+        pipeline=PipelineContext(
+            collected_sources=["plex", "musicbrainz", "wikipedia"],
+            missing_fields=[],
+            warnings=[],
+            ready_for_generation=True,
         ),
     )
 
@@ -208,6 +253,35 @@ def test_login_redacts_token_from_connection_errors(monkeypatch, tmp_path: Path)
     assert "REDACTED" in result.stdout
     assert "secret-token" not in result.stdout
     assert not Path(".env").exists()
+
+
+def test_context_album_renders_and_saves_json(monkeypatch, tmp_path: Path) -> None:
+    class FakePipeline:
+        def collect_album_context(self, *, artist: str, album: str) -> AlbumContext:
+            assert artist == "Nina Simone"
+            assert album == "Pastel Blues"
+            return _album_context()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_enrichment_pipeline",
+        lambda: (FakePipeline(), SecretStr("secret-token")),
+    )
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["context", "album", "--artist", "Nina Simone", "--album", "Pastel Blues", "--save"],
+    )
+
+    export_path = Path("exports/context/Nina-Simone-Pastel-Blues.json")
+    assert result.exit_code == 0
+    assert "PLEX" in result.stdout
+    assert "MUSICBRAINZ" in result.stdout
+    assert "WIKIPEDIA" in result.stdout
+    assert "PIPELINE STATUS" in result.stdout
+    assert "READY FOR GENERATION" in result.stdout
+    assert export_path.exists()
+    assert '"ready_for_generation": true' in export_path.read_text(encoding="utf-8")
 
 
 def test_match_command_renders_musicbrainz_match(monkeypatch) -> None:
