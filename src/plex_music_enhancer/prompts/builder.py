@@ -13,6 +13,10 @@ from plex_music_enhancer.enrichment.models import AlbumContext, ArtistContext
 from plex_music_enhancer.prompts.budget import PromptBudgetManager
 from plex_music_enhancer.prompts.registry import PromptRegistry
 from plex_music_enhancer.prompts.renderer import PromptRenderer, RenderedPrompt
+from plex_music_enhancer.prompts.targets import (
+    ARTIST_BIOGRAPHY_MAX_WORDS,
+    ARTIST_BIOGRAPHY_MIN_WORDS,
+)
 from plex_music_enhancer.verification.models import VerifiedFact
 
 ARTIST_WIKIPEDIA_EXTRACT_MAX_CHARS = 1_800
@@ -173,6 +177,8 @@ class PromptBuilder:
             "current_summary": _artist_current_summary(context.plex.summary)
             or "No current summary.",
             "language": context.wikipedia.language or "de",
+            "minimum_words": ARTIST_BIOGRAPHY_MIN_WORDS,
+            "maximum_words": ARTIST_BIOGRAPHY_MAX_WORDS,
             "additional_metadata": _artist_additional_metadata(
                 context,
                 composer=self._artist_editorial_composer,

@@ -196,12 +196,12 @@ zusätzliche Künstlerdaten; wenn keine eindeutigen Discogs-Informationen vorlie
 Außerdem zeigt `--verbose` das Prompt-Budget, die ursprüngliche und gekürzte Promptgröße sowie die
 Beiträge der einzelnen Quellen.
 
-## `review`
+## `review album`
 
 Startet die interaktive Prüfung für ein Album.
 
 ```bash
-plex-enhancer review --artist "Jennifer Rush" --album "Credo"
+plex-enhancer review album --artist "Jennifer Rush" --album "Credo"
 ```
 
 Optionen:
@@ -217,6 +217,9 @@ Interaktive Auswahl:
 ```text
 [A] Apply  [E] Edit  [S] Skip  [Q] Quit
 ```
+
+Die bisherige Form `plex-enhancer review --artist ... --album ...` bleibt aus
+Kompatibilitätsgründen unterstützt.
 
 ## `review artist`
 

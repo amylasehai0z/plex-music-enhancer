@@ -177,8 +177,8 @@ review_app = typer.Typer(
     help="Review generated metadata without modifying Plex.",
     epilog=(
         "Examples:\n"
-        '  plex-enhancer review --artist "Nina Simone" --album "Pastel Blues"\n'
-        '  plex-enhancer review --artist "Nina Simone" --album "Pastel Blues" --improve\n'
+        '  plex-enhancer review album --artist "Nina Simone" --album "Pastel Blues"\n'
+        '  plex-enhancer review album --artist "Nina Simone" --album "Pastel Blues" --improve\n'
         '  plex-enhancer review artist --artist "Nina Simone"'
     ),
     invoke_without_command=True,
@@ -577,9 +577,68 @@ def review(
         typer.Option("--improve", help="Review an improved German version of the current summary."),
     ] = False,
 ) -> None:
-    """Interactively review generated metadata and optionally apply it safely."""
+    """Review generated album metadata. Prefer `review album` for new scripts."""
     if ctx.invoked_subcommand is not None:
         return
+    _review_album_workflow(
+        artist=artist,
+        album=album,
+        provider=provider,
+        model=model,
+        json_output=json_output,
+        translate=translate,
+        improve=improve,
+    )
+
+
+@review_app.command(name="album")
+def review_album(
+    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
+    album: Annotated[str | None, typer.Option("--album", help="Album title.")] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="AI provider override for this review."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="AI model override for this review."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete review document as JSON."),
+    ] = False,
+    translate: Annotated[
+        bool,
+        typer.Option("--translate", help="Review a German translation of the current summary."),
+    ] = False,
+    improve: Annotated[
+        bool,
+        typer.Option("--improve", help="Review an improved German version of the current summary."),
+    ] = False,
+) -> None:
+    """Review generated album metadata."""
+    _review_album_workflow(
+        artist=artist,
+        album=album,
+        provider=provider,
+        model=model,
+        json_output=json_output,
+        translate=translate,
+        improve=improve,
+    )
+
+
+def _review_album_workflow(
+    *,
+    artist: str | None,
+    album: str | None,
+    provider: str | None,
+    model: str | None,
+    json_output: bool,
+    translate: bool,
+    improve: bool,
+) -> None:
+    """Create and render a shared album review workflow."""
     if artist is None or album is None:
         console.print("[red]Album review requires --artist and --album.[/red]")
         raise typer.Exit(code=1)

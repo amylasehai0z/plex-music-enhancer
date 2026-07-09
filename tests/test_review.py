@@ -10,12 +10,20 @@ from rich.console import Console
 from plex_music_enhancer.ai import GeneratedSummary
 from plex_music_enhancer.enrichment import (
     AlbumContext,
+    ArtistContext,
     MusicBrainzAlbumContext,
+    MusicBrainzArtistContext,
     PipelineContext,
     PlexAlbumContext,
+    PlexArtistContext,
     WikipediaAlbumContext,
+    WikipediaArtistContext,
 )
-from plex_music_enhancer.prompts import RenderedPrompt
+from plex_music_enhancer.prompts import (
+    ARTIST_BIOGRAPHY_MAX_WORDS,
+    ARTIST_BIOGRAPHY_MIN_WORDS,
+    RenderedPrompt,
+)
 from plex_music_enhancer.quality import QualityLevel, VerificationMetrics
 from plex_music_enhancer.quality import QualityReport as QAReport
 from plex_music_enhancer.review import (
@@ -28,8 +36,8 @@ from plex_music_enhancer.review import (
 )
 from plex_music_enhancer.review.diff import unified_summary_diff
 from plex_music_enhancer.review.policy import evaluate_review_policy
-from plex_music_enhancer.review.service import validate_summary_quality
-from plex_music_enhancer.services import EnrichmentPreviewDocument
+from plex_music_enhancer.review.service import _review_limits_for_preview, validate_summary_quality
+from plex_music_enhancer.services import ArtistPreviewDocument, EnrichmentPreviewDocument
 from plex_music_enhancer.verification import FactCollection, VerificationState, VerifiedFact
 
 
@@ -91,6 +99,16 @@ def test_quality_validation_rejects_non_german_summary() -> None:
     assert report.status == "FAILED"
     assert report.checks["language_is_german"] is False
     assert "Summary does not appear to be German." in report.failures
+
+
+def test_artist_review_limits_match_prompt_word_target() -> None:
+    """Artist review validation should share the prompt's biography word limits."""
+    preview = _artist_preview_document_for_limits()
+
+    limits = _review_limits_for_preview(preview, ReviewLimits())
+
+    assert limits.minimum_words == ARTIST_BIOGRAPHY_MIN_WORDS
+    assert limits.maximum_words == ARTIST_BIOGRAPHY_MAX_WORDS
 
 
 def test_quality_validation_warns_for_repetitive_sentence_starts() -> None:
@@ -414,6 +432,37 @@ class _FrozenModel(BaseModel):
     """Base frozen model for fixtures."""
 
     model_config = ConfigDict(frozen=True)
+
+
+def _artist_preview_document_for_limits() -> ArtistPreviewDocument:
+    """Return an artist preview fixture for review-limit tests."""
+    return ArtistPreviewDocument(
+        context=ArtistContext(
+            plex=PlexArtistContext(rating_key="100", artist="Nina Simone", summary=""),
+            musicbrainz=MusicBrainzArtistContext(artist_name="Nina Simone"),
+            wikipedia=WikipediaArtistContext(),
+            pipeline=PipelineContext(collected_sources=["plex"], ready_for_generation=True),
+        ),
+        rendered_prompt=RenderedPrompt(
+            name="artist_biography",
+            version="1.0",
+            rendered_text=(f"Use {ARTIST_BIOGRAPHY_MIN_WORDS}-{ARTIST_BIOGRAPHY_MAX_WORDS} words"),
+            variables={},
+            template="Template",
+        ),
+        generated_summary=GeneratedSummary(
+            language="de",
+            text=_german_summary(words=ARTIST_BIOGRAPHY_MIN_WORDS),
+            provider="dummy",
+            model="dummy",
+            prompt_name="artist_biography",
+            prompt_version="1.0",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            confidence=1.0,
+            source_count=1,
+        ),
+        generation_time_seconds=0.0,
+    )
 
 
 def _preview_document(

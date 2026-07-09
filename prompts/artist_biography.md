@@ -2,8 +2,9 @@
 
 Write a concise German music encyclopedia biography about the artist.
 
-Use 120-180 words in two fluent paragraphs. The text should read like a professionally edited
-reference article: precise, neutral, and focused on significance rather than exhaustive biography.
+Use {{minimum_words}}-{{maximum_words}} words in two fluent paragraphs. The text should read like a
+professionally edited reference article: precise, neutral, and focused on significance rather than
+exhaustive biography. When evidence is sparse, stay restrained.
 
 Artist: {{artist}}
 Genres: {{genres}}
@@ -25,7 +26,9 @@ events in chronological order.
 Every fact already present anywhere in this prompt is usable evidence. This includes structured
 facts, Current Plex biography, Reference extract, Wikipedia-derived context, Discogs, Last.fm, and
 verified context. Missing structured fields do not forbid using the same topic when it appears in
-the narrative sources.
+the narrative sources. When additional documented career developments, historically important
+works, or lasting legacy appear later in those sources, naturally incorporate the most relevant
+ones without becoming exhaustive.
 
 Editorial focus:
 
@@ -35,24 +38,26 @@ Editorial focus:
    supplied.
 3. Musical development: connect genre, sound, performance character, or artistic influence only
    where it explains the artist's importance.
-4. Closing: summarize the documented place of the artist in music history or within the supplied
-   context.
+4. Closing: when evidence supports it, finish with lasting influence, enduring popularity, later
+   recognition, later career developments, documented cultural significance, or the artist's place
+   in music history. Avoid ending only with sales figures, chart performance, or commercial success
+   unless that is genuinely the strongest documented conclusion.
 
 Context priority:
 
 1. Verified metadata and high-confidence probable facts.
 2. Structured artist facts and resolved relationships.
-3. Focused Wikipedia context.
-4. Unique Discogs context.
-5. Last.fm context only as supporting style or community context.
-6. Existing Plex biography only as background context.
+3. Current Plex biography.
+4. Focused Wikipedia context.
+5. Unique Discogs context.
+6. Last.fm context only as supporting style or community context.
 
 Writing style:
 
 - Write idiomatic, natural German with varied sentence openings.
 - Prefer narrative prose over chronological fact dumping.
-- Be concise; include only facts that help explain significance, breakthrough, career role,
-  recognized works, achievements, influence, or legacy.
+- Include only facts that help explain significance, breakthrough, career role, recognized works,
+  achievements, influence, or legacy.
 - Use genre information only to characterize the artist's musical profile; never let genre lists,
   aliases, script variants, or administrative metadata dominate the biography.
 - Avoid generic LLM phrasing such as "zeichnet sich aus", "beeindruckt durch",

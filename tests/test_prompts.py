@@ -24,6 +24,8 @@ from plex_music_enhancer.enrichment import (
 )
 from plex_music_enhancer.knowledge.models import KnowledgeGraph
 from plex_music_enhancer.prompts import (
+    ARTIST_BIOGRAPHY_MAX_WORDS,
+    ARTIST_BIOGRAPHY_MIN_WORDS,
     PromptBudgetManager,
     PromptBuilder,
     PromptLoader,
@@ -438,7 +440,10 @@ def test_prompt_builder_renders_artist_biography_prompt() -> None:
 
     assert prompt.name == "artist_biography"
     assert "German music encyclopedia biography" in prompt.rendered_text
-    assert "Use 120-180 words" in prompt.rendered_text
+    assert (
+        f"Use {ARTIST_BIOGRAPHY_MIN_WORDS}-{ARTIST_BIOGRAPHY_MAX_WORDS} words"
+        in prompt.rendered_text
+    )
     assert "Additional verified artist context" in prompt.rendered_text
     assert "historically or musically important" in prompt.rendered_text
     assert "Editorial focus" in prompt.rendered_text
@@ -453,7 +458,10 @@ def test_prompt_builder_renders_artist_biography_prompt() -> None:
     assert "Missing structured fields do not forbid" in prompt.rendered_text
     assert "Context priority" in prompt.rendered_text
     assert "Verified metadata and high-confidence probable facts" in prompt.rendered_text
-    assert "Existing Plex biography only as background context" in prompt.rendered_text
+    assert "Current Plex biography" in prompt.rendered_text
+    assert prompt.rendered_text.index("Current Plex biography") < prompt.rendered_text.index(
+        "Focused Wikipedia context"
+    )
     assert "career-defining achievements" in prompt.rendered_text
     assert "international recognition" in prompt.rendered_text
     assert "lasting influence" in prompt.rendered_text

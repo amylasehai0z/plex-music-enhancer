@@ -32,6 +32,45 @@ DEFAULT_QUALITY_WEIGHTS: dict[QualityCategory, float] = {
     QualityCategory.FORMATTING: 0.05,
 }
 
+ARTIST_ADMINISTRATIVE_FACT_CATEGORIES = {
+    "aliases",
+    "associated_acts",
+    "labels",
+    "members",
+    "former_members",
+    "occupations",
+    "official_website",
+}
+ARTIST_NARRATIVE_SOURCE_CATEGORIES = {"biography", "career_summary"}
+ARTIST_STYLE_CATEGORIES = {"genres", "styles"}
+ARTIST_ORIGIN_CATEGORIES = {"origin", "nationality"}
+_COUNTRY_VARIANTS = {
+    "de": ["Deutschland", "deutsch", "deutsche", "deutscher", "deutschen"],
+    "deutschland": ["deutsch", "deutsche", "deutscher", "deutschen"],
+    "germany": ["Deutschland", "deutsch", "deutsche", "deutscher", "deutschen"],
+    "gb": ["Großbritannien", "britisch", "britische", "britischer", "britischen"],
+    "uk": ["Großbritannien", "britisch", "britische", "britischer", "britischen"],
+    "united kingdom": [
+        "Großbritannien",
+        "britisch",
+        "britische",
+        "britischer",
+        "britischen",
+    ],
+    "england": ["englisch", "englische", "englischer", "englischen", "britisch"],
+    "se": ["Schweden", "schwedisch", "schwedische", "schwedischer", "schwedischen"],
+    "sweden": ["Schweden", "schwedisch", "schwedische", "schwedischer", "schwedischen"],
+    "us": ["USA", "US-amerikanisch", "US-amerikanische", "amerikanisch", "amerikanische"],
+    "usa": ["US-amerikanisch", "US-amerikanische", "amerikanisch", "amerikanische"],
+    "united states": [
+        "USA",
+        "US-amerikanisch",
+        "US-amerikanische",
+        "amerikanisch",
+        "amerikanische",
+    ],
+}
+
 
 class EditorialQualityEngine:
     """Analyze generated German descriptions without modifying them."""
@@ -82,7 +121,7 @@ class EditorialQualityEngine:
         style = self._style_engine.analyze(text, artist=artist, album=album)
         recommendable_topics = _recommendable_topics(topics, context)
         mentioned_topics = [
-            topic for topic in recommendable_topics if _mentions_any(text, topic.values)
+            topic for topic in recommendable_topics if _topic_is_mentioned(text, topic)
         ]
         omitted_topics = [
             topic
@@ -182,25 +221,20 @@ def _artist_topics(context: ArtistContext) -> list[_Topic]:
     """Return artist metadata topics that can be checked for coverage."""
     return [
         _Topic("artist", [context.plex.artist, context.full_name]),
-        _Topic("aliases", context.aliases),
-        _Topic("birth date", [context.birth_date], categories=["birth_date"]),
-        _Topic("death date", [context.death_date], categories=["death_date"]),
         _Topic(
             "origin",
             [context.origin, context.nationality, context.plex.country],
             categories=["origin", "nationality"],
         ),
-        _Topic("active years", [context.active_years], categories=["active_years"]),
-        _Topic("genres", [*context.genres, *context.musicbrainz.genres, *context.plex.genres]),
-        _Topic("styles", context.styles),
-        _Topic("members", context.members),
-        _Topic("associated acts", context.associated_acts, categories=["associated_acts"]),
-        _Topic("labels", context.labels),
-        _Topic("career summary", [context.career_summary], categories=["career_summary"]),
+        _Topic(
+            "musical style",
+            [*context.genres, *context.musicbrainz.genres, *context.plex.genres, *context.styles],
+            categories=["genres", "styles"],
+        ),
         _Topic(
             "career progression",
-            [context.active_years, *context.milestones],
-            categories=["active_years", "milestones"],
+            [*context.milestones, context.career_summary],
+            categories=["milestones", "career_summary"],
         ),
         _Topic(
             "historical context",
@@ -264,8 +298,14 @@ def _verification_metrics(context: Any, text: str) -> VerificationMetrics:
     for fact in collection.facts:
         if not fact.value:
             continue
+        if isinstance(context, ArtistContext) and _skip_artist_fact_coverage(context, text, fact):
+            continue
         label = f"{fact.category}: {fact.value}"
-        mentioned = _mentions_any(text, [fact.value])
+        mentioned = (
+            _artist_fact_is_mentioned(context, text, fact)
+            if isinstance(context, ArtistContext)
+            else _mentions_any(text, [fact.value])
+        )
         if fact.verification_state == VerificationState.VERIFIED:
             if mentioned:
                 verified_mentioned.append(label)
@@ -574,10 +614,7 @@ def _recommendation_message(topic_name: str) -> str:
         "major works": "Major works available but not mentioned.",
         "historical context": "Historical context available but not mentioned.",
         "career progression": "Career milestones available but not mentioned.",
-        "associated acts": "Associated artists available but not mentioned.",
-        "genres": "Genres available but not mentioned.",
-        "styles": "Musical style information available but not mentioned.",
-        "labels": "Label information available but not mentioned.",
+        "musical style": "Musical style information available but not mentioned.",
         "legacy": "Legacy context available but not mentioned.",
     }
     return messages.get(topic_name, f"{topic_name.title()} available but not mentioned.")
@@ -607,6 +644,95 @@ def _mentions_any(text: str, values: Iterable[str]) -> bool:
         if len(needle) >= 4 and needle[:4].isdigit() and needle[:4] in lowered:
             return True
     return False
+
+
+def _topic_is_mentioned(text: str, topic: _Topic) -> bool:
+    """Return whether a topic is covered in editorial prose."""
+    categories = set(topic.categories)
+    if categories & ARTIST_ORIGIN_CATEGORIES:
+        return _artist_origin_is_mentioned(text, topic.values)
+    if categories & ARTIST_STYLE_CATEGORIES:
+        return _artist_style_is_mentioned(text, topic.values)
+    return _mentions_any(text, topic.values)
+
+
+def _artist_fact_is_mentioned(context: ArtistContext, text: str, fact: Any) -> bool:
+    """Return whether an artist fact is covered by exact or semantic prose."""
+    if fact.category in ARTIST_ORIGIN_CATEGORIES:
+        return _artist_origin_is_mentioned(text, _artist_origin_values(context, fact.value))
+    if fact.category in ARTIST_STYLE_CATEGORIES:
+        return _artist_style_is_mentioned(text, _artist_style_values(context, fact.value))
+    return _mentions_any(text, [fact.value])
+
+
+def _skip_artist_fact_coverage(context: ArtistContext, text: str, fact: Any) -> bool:
+    """Return whether an artist fact should not affect editorial coverage."""
+    if fact.category in ARTIST_ADMINISTRATIVE_FACT_CATEGORIES:
+        return True
+    if fact.category in ARTIST_NARRATIVE_SOURCE_CATEGORIES:
+        return True
+    return fact.category in ARTIST_STYLE_CATEGORIES and _artist_style_is_mentioned(
+        text, _artist_style_values(context, fact.value)
+    )
+
+
+def _artist_origin_values(context: ArtistContext, value: object) -> list[str]:
+    """Return origin and nationality spellings that can satisfy origin coverage."""
+    values = _values([value, context.origin, context.nationality, context.plex.country])
+    expanded: list[str] = []
+    for item in values:
+        expanded.extend(_origin_variants(item))
+    return _dedupe([*values, *expanded])
+
+
+def _artist_style_values(context: ArtistContext, value: object) -> list[str]:
+    """Return style values that can satisfy concise musical characterization."""
+    return _values(
+        [
+            value,
+            *context.genres,
+            *context.musicbrainz.genres,
+            *context.plex.genres,
+            *context.styles,
+        ]
+    )
+
+
+def _artist_origin_is_mentioned(text: str, values: Iterable[str]) -> bool:
+    """Return whether origin is covered by place, country code, or nationality adjective."""
+    variants = _dedupe([variant for value in values for variant in _origin_variants(value)])
+    return _mentions_any(text, variants)
+
+
+def _artist_style_is_mentioned(text: str, values: Iterable[str]) -> bool:
+    """Return whether prose gives a concise musical style characterization."""
+    if _mentions_any(text, values):
+        return True
+    lowered = f" {text.casefold()} "
+    style_markers = (
+        " musikalische ",
+        " musikalischen ",
+        " musikalischer ",
+        " klang ",
+        " sound ",
+        " stil ",
+        " stilistisch ",
+        " repertoire ",
+        " gesang ",
+        " performance ",
+    )
+    return any(marker in lowered for marker in style_markers)
+
+
+def _origin_variants(value: object) -> list[str]:
+    """Return country and nationality variants for origin matching."""
+    text = str(value).strip()
+    if not text:
+        return []
+    lowered = text.casefold()
+    variants = [] if lowered in _COUNTRY_VARIANTS and len(lowered) <= 2 else [text]
+    variants.extend(_COUNTRY_VARIANTS.get(lowered, []))
+    return variants
 
 
 def _sentences(text: str) -> list[str]:

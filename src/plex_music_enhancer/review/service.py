@@ -6,6 +6,7 @@ from re import findall, search, split
 
 from plex_music_enhancer.editorial import GermanEditorialStyleEngine
 from plex_music_enhancer.planner import EnrichmentPlanner
+from plex_music_enhancer.prompts import ARTIST_BIOGRAPHY_MAX_WORDS, ARTIST_BIOGRAPHY_MIN_WORDS
 from plex_music_enhancer.review.diff import unified_summary_diff
 from plex_music_enhancer.review.models import QualityReport, ReviewDocument, ReviewLimits
 from plex_music_enhancer.services import (
@@ -193,7 +194,10 @@ def _review_limits_for_preview(
 ) -> ReviewLimits:
     """Return target length limits for album summaries or artist biographies."""
     if isinstance(preview, ArtistPreviewDocument) and configured_limits == ReviewLimits():
-        return ReviewLimits(minimum_words=160, maximum_words=280)
+        return ReviewLimits(
+            minimum_words=ARTIST_BIOGRAPHY_MIN_WORDS,
+            maximum_words=ARTIST_BIOGRAPHY_MAX_WORDS,
+        )
     return configured_limits
 
 

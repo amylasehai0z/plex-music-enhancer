@@ -16,6 +16,8 @@ SUPPORTED_PLACEHOLDERS = {
     "current_summary",
     "language",
     "additional_metadata",
+    "minimum_words",
+    "maximum_words",
 }
 PROMPT_VERSION = "1.1"
 

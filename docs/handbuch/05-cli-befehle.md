@@ -222,10 +222,10 @@ andernfalls steht dort `No additional artist information available.`.
 Außerdem zeigt `--verbose` das Prompt-Budget, die ursprüngliche und gekürzte Promptgröße sowie die
 Beiträge der einzelnen Quellen.
 
-## 5.17 `review`
+## 5.17 `review album`
 
 ```bash
-plex-enhancer review --artist "Jennifer Rush" --album "Credo"
+plex-enhancer review album --artist "Jennifer Rush" --album "Credo"
 ```
 
 Optionen:
@@ -235,6 +235,8 @@ Optionen:
 - `--json`
 - `--translate`
 - `--improve`
+
+Die ältere Form `plex-enhancer review --artist ... --album ...` bleibt weiterhin gültig.
 
 ## 5.18 `review artist`
 

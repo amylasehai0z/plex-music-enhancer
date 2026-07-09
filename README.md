@@ -113,7 +113,7 @@ Manager preserves verified structured metadata first, trims long provider biogra
 boundaries and reports source contributions in verbose preview output.
 
 ```bash
-plex-enhancer review \
+plex-enhancer review album \
   --artist "Jennifer Rush" \
   --album "Credo" \
   --provider openai

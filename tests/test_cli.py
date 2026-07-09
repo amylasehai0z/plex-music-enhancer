@@ -1087,6 +1087,42 @@ def test_review_command_apply_uses_safe_apply_workflow(monkeypatch) -> None:
     assert "Write successful" in result.stdout
 
 
+def test_review_album_command_prints_json(monkeypatch) -> None:
+    class FakeReviewService:
+        def create_review(self, *, artist: str, album: str) -> ReviewDocument:
+            assert artist == "Nina Simone"
+            assert album == "Pastel Blues"
+            return _review_document(status="PASS")
+
+        def update_summary(self, document: ReviewDocument, edited_summary: str) -> ReviewDocument:
+            del document, edited_summary
+            raise AssertionError("update_summary should not be called")
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_review_service",
+        lambda provider_name=None, model=None: (FakeReviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["review", "album", "--artist", "Nina Simone", "--album", "Pastel Blues", "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert '"current_summary": "Aktuelle Plex-Zusammenfassung."' in result.stdout
+    assert '"name": "album_summary"' in result.stdout
+
+
+def test_review_help_lists_album_and_artist_commands() -> None:
+    result = runner.invoke(app, ["review", "--help"])
+
+    assert result.exit_code == 0
+    assert "review album" in result.stdout
+    assert "review artist" in result.stdout
+    assert "album" in result.stdout
+    assert "artist" in result.stdout
+
+
 def test_review_artist_command_prints_json(monkeypatch) -> None:
     class FakeReviewService:
         def create_artist_review(self, *, artist: str) -> ReviewDocument:

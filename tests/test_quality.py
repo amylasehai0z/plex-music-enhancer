@@ -86,14 +86,13 @@ def test_quality_engine_analyzes_artist_biography() -> None:
 
 
 def test_quality_engine_recommends_missing_artist_context() -> None:
-    """Artist QA should recommend available career, style, legacy, and work context."""
+    """Artist QA should recommend meaningful career, legacy, and work context."""
     context = _artist_context().model_copy(
         update={
             "historical_context": "wichtige Stimme der Bürgerrechtsbewegung",
-            "associated_acts": ["Langston Hughes"],
             "notable_albums": ["Pastel Blues"],
             "milestones": ["Durchbruch in den 1960er Jahren"],
-            "genres": ["Jazz", "Soul"],
+            "influenced_artists": ["Bürgerrechtsmusikerinnen"],
         }
     )
     context = context.model_copy(update={"fact_collection": FactVerifier().verify_artist(context)})
@@ -106,10 +105,90 @@ def test_quality_engine_recommends_missing_artist_context() -> None:
     recommendations = [str(item) for item in report.recommendations]
 
     assert "Historical context available but not mentioned." in recommendations
-    assert "Associated artists available but not mentioned." in recommendations
     assert "Important albums available but not mentioned." in recommendations
     assert "Career milestones available but not mentioned." in recommendations
-    assert "Genres available but not mentioned." in recommendations
+    assert "Legacy context available but not mentioned." in recommendations
+
+
+def test_quality_engine_accepts_nationality_as_origin() -> None:
+    """Nationality adjectives should satisfy available origin context."""
+    context = _artist_context().model_copy(
+        update={
+            "origin": "Stockholm",
+            "nationality": "Sweden",
+        }
+    )
+    context = context.model_copy(update={"fact_collection": FactVerifier().verify_artist(context)})
+
+    report = EditorialQualityEngine().analyze_artist(
+        context,
+        "ABBA war eine schwedische Popgruppe mit international geprägter musikalischer Wirkung.",
+    )
+
+    assert "origin" not in report.missing_topics
+    assert not any("Origin available" in str(item) for item in report.recommendations)
+
+
+def test_quality_engine_does_not_report_aliases_as_missing_opportunities() -> None:
+    """Aliases are metadata and should not be required editorial content."""
+    context = _artist_context().model_copy(
+        update={"aliases": ["Eunice Waymon", "Script Variant", "DM"]}
+    )
+    context = context.model_copy(update={"fact_collection": FactVerifier().verify_artist(context)})
+
+    report = EditorialQualityEngine().analyze_artist(
+        context,
+        "Nina Simone war eine US-amerikanische Musikerin mit eigenständiger musikalischer Sprache.",
+    )
+
+    assert "aliases" not in report.missing_topics
+    assert not any("alias" in str(item).casefold() for item in report.recommendations)
+
+
+def test_quality_engine_accepts_partial_genre_usage() -> None:
+    """One concise stylistic characterization should satisfy broader genre metadata."""
+    context = _artist_context().model_copy(
+        update={"genres": ["Jazz", "Soul", "Blues", "Gospel"], "styles": ["Vocal Jazz"]}
+    )
+    context = context.model_copy(update={"fact_collection": FactVerifier().verify_artist(context)})
+
+    report = EditorialQualityEngine().analyze_artist(
+        context,
+        "Nina Simone war eine US-amerikanische Musikerin, deren Jazz-Gesang politische "
+        "Dringlichkeit mit einer unverwechselbaren musikalischen Sprache verband.",
+    )
+
+    assert "musical style" not in report.missing_topics
+    assert not any("Genre" in str(item) for item in report.recommendations)
+
+
+def test_quality_engine_score_does_not_drop_for_omitted_administrative_metadata() -> None:
+    """Omitted aliases, labels, websites, and exhaustive genres should not lower artist QA."""
+    base = _artist_context()
+    enriched = base.model_copy(
+        update={
+            "aliases": ["Eunice Waymon", "Nina Simone", "Script Variant"],
+            "genres": ["Jazz", "Soul", "Blues", "Gospel", "Vocal Jazz"],
+            "labels": ["Bethlehem", "Philips", "RCA"],
+            "official_website": "https://example.invalid",
+            "associated_acts": ["Langston Hughes"],
+        }
+    )
+    enriched = enriched.model_copy(
+        update={"fact_collection": FactVerifier().verify_artist(enriched)}
+    )
+    text = (
+        "Nina Simone war eine US-amerikanische Musikerin, deren Jazz-Gesang eine "
+        "eigenständige musikalische Sprache entwickelte. Dabei verband sie künstlerische "
+        "Prägnanz mit einer sachlichen Bedeutung für ihre Zeit."
+    )
+
+    base_report = EditorialQualityEngine().analyze_artist(base, text)
+    enriched_report = EditorialQualityEngine().analyze_artist(enriched, text)
+
+    assert enriched_report.overall_score >= base_report.overall_score
+    assert "aliases" not in enriched_report.missing_topics
+    assert "labels" not in enriched_report.missing_topics
 
 
 def test_quality_engine_filters_unknown_and_low_confidence_artist_recommendations() -> None:
