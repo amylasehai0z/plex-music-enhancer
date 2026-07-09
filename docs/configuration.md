@@ -42,7 +42,17 @@ in `.env` und erhält andere Einträge.
 | `PLEX_ENHANCER_AI__TIMEOUT_SECONDS` | `30` | Timeout für AI-Anfragen |
 | `PLEX_ENHANCER_AI__MAX_RETRIES` | `2` | Wiederholungen bei temporären Fehlern |
 | `PLEX_ENHANCER_AI__MAX_PROMPT_CHARACTERS` | `20000` | Maximale Promptlänge |
+| `AI_PROMPT_MAX_CHARS` | `20000` | Kompatible Kurzform für die maximale Promptlänge |
 | `OPENAI_API_KEY` | leer | OpenAI API Key |
+
+Die Promptlänge wird automatisch eingehalten. Wenn ein sehr großer Künstlerkontext das Budget
+überschreitet, kürzt der Prompt Budget Manager zuerst niedrig priorisierte Quellen wie bestehende
+Plex-Biografien, Last.fm-, Discogs- und Wikipedia-Langtexte. Verifizierte strukturierte Metadaten
+bleiben erhalten.
+
+`PLEX_ENHANCER_AI__MAX_PROMPT_CHARACTERS` ist die kanonische Einstellung. `AI_PROMPT_MAX_CHARS`
+wird aus Umgebungsvariablen und explizit geladenen `.env` Dateien weiterhin unterstützt, damit
+bestehende Setups nicht angepasst werden müssen.
 
 Anbieter:
 

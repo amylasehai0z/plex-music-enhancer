@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Protocol
+from urllib.parse import quote, urljoin
 
 from plexapi.server import PlexServer
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr
@@ -10,7 +11,6 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr
 from plex_music_enhancer.apply.audit import ApplyAuditRecord, AuditStore
 from plex_music_enhancer.apply.backup import BackupStore, SummaryBackup
 from plex_music_enhancer.apply.verification import (
-    PlexWriteError,
     VerificationResult,
     verify_album_summary,
     write_album_summary,
@@ -51,6 +51,24 @@ class _AlbumLoader(Protocol):
         """Load a Plex album object."""
 
 
+def plex_metadata_path(rating_key: str) -> str:
+    """Return a Plex metadata path for a rating key or existing metadata path."""
+    key = str(rating_key).strip()
+    if not key:
+        raise ApplyError("Plex rating key is empty.")
+
+    if key.startswith("/"):
+        return key
+
+    return f"/library/metadata/{quote(key.strip('/'), safe='')}"
+
+
+def plex_metadata_url(base_url: str, rating_key: str) -> str:
+    """Return the absolute Plex metadata URL for diagnostics."""
+    normalized_base = str(base_url).rstrip("/") + "/"
+    return urljoin(normalized_base, plex_metadata_path(rating_key).lstrip("/"))
+
+
 class ApplyService:
     """Apply a generated album summary with backup, verification, and audit logging."""
 
@@ -71,6 +89,7 @@ class ApplyService:
         self._review_service = review_service
         self._backup_store = backup_store or BackupStore()
         self._audit_store = audit_store or AuditStore()
+        self._base_url = str(base_url)
         self._album_loader = album_loader or _PlexAlbumLoader(base_url, token)
         self._minimum_quality_score = minimum_quality_score
         self._verification_confidence_threshold = verification_confidence_threshold
@@ -167,9 +186,13 @@ class ApplyService:
             if not verification.passed:
                 message = "Summary write completed, but verification failed after reload."
         except Exception as exc:
-            message = str(exc) or "Summary write failed."
-            if not isinstance(exc, PlexWriteError):
-                message = f"Summary write failed: {message}"
+            attempted_url = plex_metadata_url(self._base_url, context.plex.rating_key)
+            underlying = str(exc) or exc.__class__.__name__
+            message = (
+                "Summary write failed.\n"
+                f"Attempted URL: {attempted_url}\n"
+                f"Underlying exception: {underlying}"
+            )
 
         status = (
             "SUCCESS"
@@ -249,9 +272,19 @@ class _PlexAlbumLoader:
 
     def __call__(self, rating_key: str) -> Any:
         """Fetch an album object from Plex by rating key."""
-        server = PlexServer(self._base_url, self._token.get_secret_value())
-        fetch_item = getattr(server, "fetchItem", None)
-        if not callable(fetch_item):
-            raise ApplyError("Plex server does not support fetchItem().")
+        metadata_path = plex_metadata_path(rating_key)
+        attempted_url = plex_metadata_url(self._base_url, rating_key)
+        try:
+            server = PlexServer(self._base_url, self._token.get_secret_value())
+            fetch_item = getattr(server, "fetchItem", None)
+            if not callable(fetch_item):
+                raise ApplyError("Plex server does not support fetchItem().")
 
-        return fetch_item(rating_key)
+            return fetch_item(metadata_path)
+        except Exception as exc:
+            msg = (
+                "Unable to load Plex metadata item.\n"
+                f"Attempted URL: {attempted_url}\n"
+                f"Underlying exception: {exc}"
+            )
+            raise ApplyError(msg) from exc

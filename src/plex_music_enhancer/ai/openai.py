@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import UTC, datetime
 from os import environ
+from pathlib import Path
 from time import sleep
 from typing import Any
 
@@ -21,6 +23,7 @@ from plex_music_enhancer.prompts.renderer import RenderedPrompt
 
 PROVIDER_NAME = "openai"
 DEFAULT_CONFIDENCE = 0.85
+PROMPT_DEBUG_DUMP_PATH = Path("/tmp/openai_prompt.txt")  # noqa: S108 - requested debug path.
 
 
 class OpenAIProvider(AIProvider):
@@ -123,6 +126,7 @@ class OpenAIProvider(AIProvider):
         last_error: Exception | None = None
         for attempt in range(attempts):
             try:
+                _dump_prompt_for_debugging(rendered_text)
                 return self._client_instance().responses.create(
                     model=self.model,
                     input=rendered_text,
@@ -184,6 +188,12 @@ def _validate_prompt(prompt: RenderedPrompt, *, max_characters: int) -> None:
             "OpenAI provider refuses to send a prompt longer than " f"{max_characters} characters."
         )
         raise AIProviderConfigurationError(msg)
+
+
+def _dump_prompt_for_debugging(rendered_text: str) -> None:
+    """Temporarily dump the exact OpenAI prompt for local debugging."""
+    with suppress(OSError):
+        PROMPT_DEBUG_DUMP_PATH.write_text(rendered_text, encoding="utf-8")
 
 
 def _response_text(response: Any) -> str:

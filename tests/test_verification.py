@@ -119,6 +119,21 @@ def test_fact_verifier_detects_conflicting_artist_facts() -> None:
     assert {fact.category for fact in collection.conflicts} == {"origin"}
 
 
+def test_fact_verifier_keeps_birth_date_and_career_years_independent() -> None:
+    """A birth date accidentally present as active years should not verify as career years."""
+    context = _artist_context().model_copy(
+        update={
+            "active_years": "1933-02-21",
+            "discogs": DiscogsArtistContext(),
+        }
+    )
+
+    collection = FactVerifier().verify_artist(context)
+
+    assert collection.by_category("birth_date")[0].value == "1933-02-21"
+    assert collection.by_category("active_years")[0].verification_state == VerificationState.UNKNOWN
+
+
 def _context(
     *,
     producers: list[str] | None = None,

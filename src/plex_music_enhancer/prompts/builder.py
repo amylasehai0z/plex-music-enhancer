@@ -2,11 +2,109 @@
 
 from __future__ import annotations
 
+from logging import DEBUG, getLogger
+from re import split, sub
+
+from plex_music_enhancer.config import Settings
 from plex_music_enhancer.editorial import ArtistEditorialComposer, EditorialComposer
 from plex_music_enhancer.editorial.composer import render_editorial_context
+from plex_music_enhancer.editorial.models import EditorialContext
 from plex_music_enhancer.enrichment.models import AlbumContext, ArtistContext
+from plex_music_enhancer.prompts.budget import PromptBudgetManager
 from plex_music_enhancer.prompts.registry import PromptRegistry
 from plex_music_enhancer.prompts.renderer import PromptRenderer, RenderedPrompt
+from plex_music_enhancer.verification.models import VerifiedFact
+
+ARTIST_WIKIPEDIA_EXTRACT_MAX_CHARS = 1_800
+ARTIST_CURRENT_SUMMARY_MAX_CHARS = 1_500
+ARTIST_CURRENT_SUMMARY_EXCERPT_MIN_CHARS = 500
+ARTIST_CURRENT_SUMMARY_EXCERPT_MAX_CHARS = 900
+ARTIST_WIKIPEDIA_KEEP_KEYWORDS = (
+    "achievement",
+    "award",
+    "breakthrough",
+    "career",
+    "formed",
+    "formation",
+    "founded",
+    "genre",
+    "historical",
+    "influence",
+    "legacy",
+    "milestone",
+    "musical",
+    "significance",
+    "style",
+    "auszeichnung",
+    "bedeutung",
+    "durchbruch",
+    "einfluss",
+    "erfolg",
+    "gegründet",
+    "gründung",
+    "historisch",
+    "karriere",
+    "meilenstein",
+    "musikalisch",
+    "stil",
+)
+ARTIST_CURRENT_SUMMARY_KEEP_KEYWORDS = (
+    "achievement",
+    "breakthrough",
+    "career-defining",
+    "cultural impact",
+    "historically important",
+    "influence",
+    "international",
+    "legacy",
+    "recognized",
+    "significance",
+    "wirkung",
+    "bedeutung",
+    "durchbruch",
+    "einfluss",
+    "erfolg",
+    "international",
+    "kulturell",
+    "prägend",
+    "werk",
+)
+ARTIST_CURRENT_SUMMARY_DROP_KEYWORDS = (
+    "band member",
+    "discography",
+    "line-up",
+    "personnel",
+    "song-by-song",
+    "tour",
+    "track-by-track",
+    "besetzung",
+    "diskografie",
+    "mitglieder",
+    "titel für titel",
+    "tournee",
+)
+ARTIST_WIKIPEDIA_DROP_KEYWORDS = (
+    "concert",
+    "detailed chronology",
+    "discography",
+    "divorce",
+    "personal life",
+    "relationship",
+    "song-by-song",
+    "tour",
+    "track-by-track",
+    "konzert",
+    "privatleben",
+    "titel für titel",
+    "tournee",
+)
+LOGGER = getLogger(__name__)
+LOW_NARRATIVE_VERIFIED_CATEGORIES = {
+    "aliases",
+    "birth_name",
+    "genres",
+    "styles",
+}
 
 
 class PromptBuilder:
@@ -19,12 +117,16 @@ class PromptBuilder:
         renderer: PromptRenderer | None = None,
         editorial_composer: EditorialComposer | None = None,
         artist_editorial_composer: ArtistEditorialComposer | None = None,
+        budget_manager: PromptBudgetManager | None = None,
     ) -> None:
         """Create a prompt builder."""
         self._registry = registry or PromptRegistry()
         self._renderer = renderer or PromptRenderer()
         self._editorial_composer = editorial_composer or EditorialComposer()
         self._artist_editorial_composer = artist_editorial_composer or ArtistEditorialComposer()
+        self._budget_manager = budget_manager or PromptBudgetManager(
+            Settings().ai.max_prompt_characters
+        )
 
     def build_album_summary_prompt(
         self,
@@ -48,11 +150,13 @@ class PromptBuilder:
                 composer=self._editorial_composer,
             ),
         }
-        return self._renderer.render(
-            name=template.name,
-            version=template.version,
-            template=template.template,
-            variables=variables,
+        return self._budget_manager.fit(
+            self._renderer.render(
+                name=template.name,
+                version=template.version,
+                template=template.template,
+                variables=variables,
+            )
         )
 
     def build_artist_summary_prompt(self, context: ArtistContext) -> RenderedPrompt:
@@ -64,20 +168,25 @@ class PromptBuilder:
             "genres": _first_list(context.genres, context.musicbrainz.genres, context.plex.genres)
             or ["No genres available"],
             "release_date": context.musicbrainz.begin_date or "",
-            "wikipedia_extract": context.wikipedia.extract or "No reference extract available.",
-            "current_summary": context.plex.summary or "No current summary.",
+            "wikipedia_extract": _artist_wikipedia_extract(context.wikipedia.extract)
+            or "No reference extract available.",
+            "current_summary": _artist_current_summary(context.plex.summary)
+            or "No current summary.",
             "language": context.wikipedia.language or "de",
             "additional_metadata": _artist_additional_metadata(
                 context,
                 composer=self._artist_editorial_composer,
             ),
         }
-        return self._renderer.render(
+        rendered = self._renderer.render(
             name=template.name,
             version=template.version,
             template=template.template,
             variables=variables,
         )
+        prompt = self._budget_manager.fit(rendered)
+        _log_artist_prompt_diagnostics(prompt)
+        return prompt
 
 
 def _first_list(*lists: list[str]) -> list[str]:
@@ -103,9 +212,323 @@ def _artist_additional_metadata(
     *,
     composer: ArtistEditorialComposer | None = None,
 ) -> str:
-    """Return editorial artist guidance for prompt context."""
+    """Return structured artist facts for prompt context."""
     selected_composer = composer or ArtistEditorialComposer()
-    return render_editorial_context(selected_composer.compose_artist(context))
+    return _render_artist_structured_context(context, selected_composer.compose_artist(context))
+
+
+def _log_artist_prompt_diagnostics(prompt: RenderedPrompt) -> None:
+    """Log artist prompt diagnostics when debug logging is enabled."""
+    if not LOGGER.isEnabledFor(DEBUG):
+        return
+
+    section_sizes = _prompt_section_sizes(prompt)
+    largest_contributors = sorted(
+        section_sizes.items(),
+        key=lambda item: (-item[1], item[0]),
+    )[:5]
+    duplicate_content = _duplicate_prompt_content(prompt)
+    LOGGER.debug(
+        "Artist prompt diagnostics: total_characters=%s estimated_tokens=%s "
+        "section_sizes=%s largest_contributors=%s duplicate_content=%s",
+        len(prompt.rendered_text),
+        _estimated_tokens(prompt.rendered_text),
+        section_sizes,
+        largest_contributors,
+        duplicate_content,
+    )
+
+
+def _prompt_section_sizes(prompt: RenderedPrompt) -> dict[str, int]:
+    """Return character sizes for rendered prompt sections and variables."""
+    sections: dict[str, int] = {
+        f"variable:{name}": len(value) for name, value in sorted(prompt.variables.items())
+    }
+    sections.update(_rendered_section_sizes(prompt.rendered_text))
+    return sections
+
+
+def _rendered_section_sizes(text: str) -> dict[str, int]:
+    """Return approximate section sizes from the rendered Markdown prompt."""
+    sections: dict[str, list[str]] = {}
+    current = "section:preamble"
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            current = f"section:{stripped.removeprefix('# ').strip()}"
+        elif stripped.endswith(":") and not stripped.startswith(
+            ("-", "1.", "2.", "3.", "4.", "5.", "6.")
+        ):
+            current = f"section:{stripped.rstrip(':')}"
+        sections.setdefault(current, []).append(line)
+    return {name: len("\n".join(lines)) for name, lines in sections.items()}
+
+
+def _duplicate_prompt_content(prompt: RenderedPrompt) -> list[str]:
+    """Return normalized duplicate lines detected in prompt variables."""
+    counts: dict[str, tuple[str, int]] = {}
+    for value in prompt.variables.values():
+        for line in value.splitlines():
+            text = line.strip()
+            if len(text) < 12:
+                continue
+            key = sub(r"\s+", " ", text.casefold())
+            original, count = counts.get(key, (text, 0))
+            counts[key] = (original, count + 1)
+    return [original for original, count in counts.values() if count > 1]
+
+
+def _estimated_tokens(text: str) -> int:
+    """Return a deterministic rough token estimate."""
+    return max(1, round(len(text) / 4))
+
+
+def _render_artist_structured_context(
+    context: ArtistContext,
+    editorial: EditorialContext,
+) -> str:
+    """Render artist context as compact factual sections."""
+    lines: list[str] = []
+    _append_structured_value(lines, "Artist", context.full_name or context.plex.artist)
+    _append_structured_list(
+        lines,
+        "Genres",
+        _dedupe_list(_first_list(context.genres, context.musicbrainz.genres, context.plex.genres)),
+    )
+    _append_structured_value(
+        lines, "Active years", context.active_years or context.discogs.active_years
+    )
+    _append_structured_list(
+        lines, "Members", _dedupe_list(context.members or context.discogs.members)
+    )
+    _append_structured_value(
+        lines,
+        "Origin",
+        context.origin
+        or context.plex.country
+        or context.nationality
+        or context.musicbrainz.country,
+    )
+    _append_structured_list(
+        lines,
+        "Career highlights",
+        _dedupe_list(
+            [
+                *context.milestones,
+                *_fact_values(
+                    editorial.career_context, skipped_topics={"active_years", "identity"}
+                ),
+            ]
+        ),
+    )
+    _append_structured_list(lines, "Most notable works", _dedupe_list(context.notable_albums))
+    _append_structured_list(lines, "Awards", _dedupe_list(context.awards))
+    _append_structured_list(
+        lines,
+        "Historical significance",
+        _dedupe_list(
+            [
+                *context.influenced_artists,
+                *_fact_values(editorial.historical_context),
+                *_fact_values(editorial.legacy_context),
+            ]
+        ),
+    )
+    _append_structured_verified(lines, "Verified facts", editorial.verified_facts)
+    _append_structured_list(
+        lines,
+        "Avoid topics",
+        ["unsupported claims not present anywhere in the supplied context"],
+    )
+    return "\n".join(lines) if lines else "No structured artist facts available."
+
+
+def _fact_values(facts: object, *, skipped_topics: set[str] | None = None) -> list[str]:
+    """Return compact fact texts from editorial facts."""
+    if not isinstance(facts, list):
+        return []
+    skipped = {"aliases", "genres", *(skipped_topics or set())}
+    return [
+        fact.text
+        for fact in facts
+        if hasattr(fact, "text")
+        and hasattr(fact, "topic")
+        and fact.topic not in skipped
+        and isinstance(fact.text, str)
+        and len(fact.text) <= 240
+    ]
+
+
+def _append_structured_value(lines: list[str], label: str, value: str | None) -> None:
+    """Append one compact scalar section."""
+    if value:
+        lines.append(f"{label}: {value}")
+
+
+def _append_structured_list(lines: list[str], label: str, values: list[str] | None) -> None:
+    """Append one compact list section."""
+    if values:
+        lines.append(f"{label}: {', '.join(values)}")
+
+
+def _append_structured_verified(
+    lines: list[str],
+    label: str,
+    facts: list[VerifiedFact] | None,
+) -> None:
+    """Append verified facts in compact deterministic form."""
+    if not facts:
+        return
+    selected = [fact for fact in facts if fact.category not in LOW_NARRATIVE_VERIFIED_CATEGORIES]
+    if not selected:
+        return
+    rendered = [
+        (
+            f"{fact.category}={fact.value} "
+            f"({fact.confidence_score:.2f}; {', '.join(fact.supporting_sources) or 'none'})"
+        )
+        for fact in selected
+    ]
+    lines.append(f"{label}: {'; '.join(rendered)}")
+
+
+def _dedupe_list(values: list[str]) -> list[str]:
+    """Return deterministic case-insensitive unique values."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value).strip()
+        key = text.casefold()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+    return result
+
+
+def _artist_wikipedia_extract(extract: str | None) -> str | None:
+    """Return a focused Wikipedia excerpt for artist biography prompts."""
+    if not extract:
+        return None
+
+    sentences = _reference_sentences(extract)
+    selected = [sentence for sentence in sentences if _keep_artist_reference_sentence(sentence)]
+    if not selected:
+        selected = [
+            sentence for sentence in sentences if not _drop_artist_reference_sentence(sentence)
+        ]
+    if not selected:
+        return None
+
+    return _join_to_budget(selected, ARTIST_WIKIPEDIA_EXTRACT_MAX_CHARS)
+
+
+def _artist_current_summary(summary: str | None) -> str | None:
+    """Return a compact excerpt from the existing artist summary."""
+    if not summary:
+        return None
+    if len(summary) <= ARTIST_CURRENT_SUMMARY_MAX_CHARS:
+        return summary
+
+    paragraphs = _reference_paragraphs(summary)
+    selected = [
+        paragraph for paragraph in paragraphs if _keep_artist_current_summary_paragraph(paragraph)
+    ]
+    has_informative_selection = bool(selected)
+    if not selected:
+        selected = _fallback_current_summary_paragraphs(paragraphs)
+    if has_informative_selection:
+        selected = _extend_current_summary_selection(selected, paragraphs)
+    return _join_to_budget(selected, ARTIST_CURRENT_SUMMARY_EXCERPT_MAX_CHARS)
+
+
+def _reference_paragraphs(text: str) -> list[str]:
+    """Split prose into deterministic paragraph-like chunks."""
+    return [
+        sub(r"\s+", " ", paragraph).strip()
+        for paragraph in split(r"\n\s*\n", text)
+        if paragraph.strip()
+    ]
+
+
+def _keep_artist_current_summary_paragraph(paragraph: str) -> bool:
+    """Return whether a Plex biography paragraph has narrative value."""
+    normalized = paragraph.casefold()
+    has_keep_signal = any(keyword in normalized for keyword in ARTIST_CURRENT_SUMMARY_KEEP_KEYWORDS)
+    has_drop_signal = any(keyword in normalized for keyword in ARTIST_CURRENT_SUMMARY_DROP_KEYWORDS)
+    return has_keep_signal and not has_drop_signal
+
+
+def _drop_artist_current_summary_paragraph(paragraph: str) -> bool:
+    """Return whether a Plex biography paragraph should be avoided in excerpts."""
+    normalized = paragraph.casefold()
+    return any(keyword in normalized for keyword in ARTIST_CURRENT_SUMMARY_DROP_KEYWORDS)
+
+
+def _fallback_current_summary_paragraphs(paragraphs: list[str]) -> list[str]:
+    """Prefer the beginning and conclusion when no better narrative signal exists."""
+    if not paragraphs:
+        return []
+    if len(paragraphs) == 1:
+        return paragraphs
+    return [paragraphs[0], paragraphs[-1]]
+
+
+def _extend_current_summary_selection(
+    selected: list[str],
+    paragraphs: list[str],
+) -> list[str]:
+    """Extend a short excerpt deterministically without repeating paragraphs."""
+    result = _dedupe_list(selected)
+    if len(" ".join(result)) >= ARTIST_CURRENT_SUMMARY_EXCERPT_MIN_CHARS:
+        return result
+
+    candidates = [
+        paragraph
+        for paragraph in [*paragraphs[:4], *paragraphs[-4:]]
+        if not _drop_artist_current_summary_paragraph(paragraph)
+    ]
+    for paragraph in candidates:
+        result = _dedupe_list([*result, paragraph])
+        if len(_join_to_budget(result, ARTIST_CURRENT_SUMMARY_EXCERPT_MAX_CHARS)) >= (
+            ARTIST_CURRENT_SUMMARY_EXCERPT_MIN_CHARS
+        ):
+            break
+    return result
+
+
+def _reference_sentences(text: str) -> list[str]:
+    """Split prose into deterministic sentence-like chunks."""
+    normalized = sub(r"\s+", " ", text).strip()
+    return [
+        sentence.strip() for sentence in split(r"(?<=[.!?])\s+", normalized) if sentence.strip()
+    ]
+
+
+def _keep_artist_reference_sentence(sentence: str) -> bool:
+    """Return whether a Wikipedia sentence is useful artist summary context."""
+    normalized = sentence.casefold()
+    has_keep_signal = any(keyword in normalized for keyword in ARTIST_WIKIPEDIA_KEEP_KEYWORDS)
+    return has_keep_signal and not _drop_artist_reference_sentence(sentence)
+
+
+def _drop_artist_reference_sentence(sentence: str) -> bool:
+    """Return whether a Wikipedia sentence is too detailed for prompt context."""
+    normalized = sentence.casefold()
+    return any(keyword in normalized for keyword in ARTIST_WIKIPEDIA_DROP_KEYWORDS)
+
+
+def _join_to_budget(sentences: list[str], max_characters: int) -> str:
+    """Join sentences without cutting in the middle of a sentence."""
+    result: list[str] = []
+    size = 0
+    for sentence in sentences:
+        next_size = size + len(sentence) + (1 if result else 0)
+        if next_size > max_characters:
+            break
+        result.append(sentence)
+        size = next_size
+    return " ".join(result) if result else sentences[0][:max_characters].rstrip()
 
 
 def _legacy_album_additional_metadata(context: AlbumContext) -> str:

@@ -18,7 +18,14 @@ from plex_music_enhancer.enrichment import (
 from plex_music_enhancer.prompts import RenderedPrompt
 from plex_music_enhancer.quality import QualityLevel, VerificationMetrics
 from plex_music_enhancer.quality import QualityReport as QAReport
-from plex_music_enhancer.review import ReviewDocument, ReviewLimits, ReviewRenderer, ReviewService
+from plex_music_enhancer.review import (
+    ReviewDebugContext,
+    ReviewDebugLogger,
+    ReviewDocument,
+    ReviewLimits,
+    ReviewRenderer,
+    ReviewService,
+)
 from plex_music_enhancer.review.diff import unified_summary_diff
 from plex_music_enhancer.review.policy import evaluate_review_policy
 from plex_music_enhancer.review.service import validate_summary_quality
@@ -234,6 +241,51 @@ def test_review_renderer_outputs_required_sections() -> None:
     assert "VERIFICATION SUMMARY" in output
     assert "Sentence variation" in output
     assert "PASS" in output
+
+
+def test_review_debug_logger_writes_sectioned_review_log(tmp_path) -> None:
+    """Review debug logger should persist the current review sections as plain text."""
+    document = _review_document()
+    log_path = tmp_path / "plex_review.log"
+    prompt_dump_path = tmp_path / "openai_prompt.txt"
+    prompt_dump_path.write_text(document.preview.rendered_prompt.rendered_text, encoding="utf-8")
+    logger = ReviewDebugLogger(
+        path=log_path,
+        prompt_dump_path=prompt_dump_path,
+        clock=lambda: datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
+    )
+
+    logger.write(
+        document,
+        ReviewDebugContext(
+            artist="Nina Simone",
+            album="Pastel Blues",
+            provider="openai",
+            model="gpt-5.5",
+        ),
+    )
+
+    output = log_path.read_text(encoding="utf-8")
+    assert "Timestamp: 2026-01-01T12:00:00+00:00" in output
+    assert "Command context: artist=Nina Simone, album=Pastel Blues" in output
+    assert "provider=openai" in output
+    assert "model=gpt-5.5" in output
+    assert "=== PROMPT " in output
+    assert document.preview.rendered_prompt.rendered_text in output
+    assert "=== CURRENT SUMMARY " in output
+    assert "Aktuelle Plex-Zusammenfassung." in output
+    assert "=== GENERATED SUMMARY " in output
+    assert document.proposed_summary in output
+    assert "=== UNIFIED DIFF " in output
+    assert "--- current summary" in output
+    assert "=== QUALITY " in output
+    assert "QUALITY SUMMARY" in output
+    assert "=== STYLE ANALYSIS " in output
+    assert "Sentence variation" in output
+    assert "=== EDITORIAL QUALITY " in output
+    assert "Overall Score" in output
+    assert "=== VERIFICATION " in output
+    assert "VERIFICATION SUMMARY" in output
 
 
 def test_policy_allows_score_91_with_weak_opening_warning() -> None:

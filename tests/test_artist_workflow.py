@@ -56,6 +56,25 @@ def test_enrichment_pipeline_collects_artist_context() -> None:
     assert context.pipeline.ready_for_generation is True
 
 
+def test_artist_career_years_never_fall_back_to_birth_date() -> None:
+    """MusicBrainz life-span begin dates must not be displayed as career years."""
+    pipeline = EnrichmentPipeline(
+        "http://localhost:32400",
+        SecretStr("token"),
+        musicbrainz_provider=FakeMusicBrainzProvider(),
+        wikipedia_provider=FakeWikipediaProvider(),
+        discogs_provider=MissingDiscogsProvider(),
+        lastfm_provider=FakeLastFMProvider(),
+        plex_server_factory=FakePlexServer,
+    )
+
+    context = pipeline.collect_artist_context(artist="Nina Simone")
+
+    assert context.birth_date == "1933-02-21"
+    assert context.active_years is None
+    assert context.fact_collection.by_category("active_years")[0].value == ""
+
+
 def test_artist_editorial_composer_builds_biography_guidance() -> None:
     """Artist composer should produce reusable biography guidance."""
     context = FakeArtistPipeline().collect_artist_context(artist="Nina Simone")
@@ -87,6 +106,10 @@ def test_preview_and_review_generate_artist_biography() -> None:
     assert preview.context.plex.artist == "Nina Simone"
     assert preview.context.fact_collection.facts
     assert preview.generated_summary.text == _german_summary()
+    assert preview.career_years == "1954-2003"
+    assert preview.source_availability["discogs"] == "available"
+    assert "career_years" in preview.resolved_prompt_variables
+    assert preview.knowledge_summary["fact_count"] > 0
     assert review.current_summary == "Aktuelle Biografie."
     assert review.proposed_summary == _german_summary()
     assert review.quality.status == "PASS"
@@ -246,6 +269,22 @@ class FakeDiscogsProvider:
         raise AssertionError("album lookup should not be used")
 
 
+class MissingDiscogsProvider:
+    """Fake disabled Discogs provider."""
+
+    configured = False
+
+    def lookup_artist(self, artist: str) -> DiscogsArtistContext:
+        """Return no Discogs artist context."""
+        del artist
+        return DiscogsArtistContext()
+
+    def lookup_album(self, artist: str, album: str) -> object:
+        """Unused album lookup."""
+        del artist, album
+        raise AssertionError("album lookup should not be used")
+
+
 class FakeLastFMProvider:
     """Fake optional Last.fm provider."""
 
@@ -360,13 +399,21 @@ class FakeMutablePlexObject:
 def _german_summary() -> str:
     """Return deterministic German prose."""
     return (
-        "Nina Simone, geboren 1933 als Eunice Waymon und gestorben 2003, war eine "
-        "US-amerikanische Musikerin, deren Werk Jazz, Soul, Blues und klassische "
-        "Einflüsse miteinander verband. Zwischen 1954 und 2003 entwickelte sie einen "
-        "präzisen Vocal-Jazz-Stil, der Gesang und Klavier eng aufeinander bezog. "
-        "Zugleich wurde sie durch eindringliche Interpretationen und politisch bewusste "
-        "Lieder bekannt, die ihre künstlerische Entwicklung mit der Bürgerrechtsbewegung "
-        "verbanden. Dadurch gilt ihre Laufbahn als wichtiger Bezugspunkt für die "
-        "Geschichte afroamerikanischer Populärmusik, ohne sich auf ein einzelnes Genre "
-        "reduzieren zu lassen."
+        "Als klassisch ausgebildete Pianistin und Sängerin wurde Nina Simone zu einer "
+        "prägenden Stimme der US-amerikanischen Musik des 20. Jahrhunderts. Geboren "
+        "1933 als Eunice Waymon, verband sie Jazz, Soul, Blues, Gospel und klassische "
+        "Einflüsse zu einem Stil, der interpretatorische Strenge mit politischer "
+        "Dringlichkeit verband. Zwischen 1954 und 2003 entwickelte sie eine Laufbahn, "
+        "in der ihre Klavierarbeit, ihre kontrollierte Stimme und ihre Auswahl "
+        "dramatisch zugespitzter Lieder eng zusammenwirkten. Dabei blieb ihre Musik "
+        "nie auf ein einzelnes Genre beschränkt, sondern nutzte bekannte Formen als "
+        "Ausgangspunkt für eigene Deutungen.\n\n"
+        "Zugleich gewann Simone durch Aufnahmen wie Pastel Blues und durch Lieder mit "
+        "gesellschaftlicher Schärfe eine Bedeutung, die über das Repertoire einer "
+        "Jazz- oder Soulsängerin hinausging. Später wurde ihr Werk häufig mit der "
+        "Bürgerrechtsbewegung und mit der Geschichte afroamerikanischer Populärmusik "
+        "in Verbindung gebracht, ohne dass ihre Kunst darauf reduziert werden kann. "
+        "Insgesamt steht ihre Biografie für eine eigenständige künstlerische Haltung, "
+        "die musikalische Präzision, persönliche Ausdruckskraft und historischen "
+        "Kontext miteinander verbindet und bis heute als Referenzpunkt wirkt."
     )

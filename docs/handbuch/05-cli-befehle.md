@@ -208,7 +208,19 @@ Optionen:
 ```bash
 plex-enhancer preview artist --artist "Jennifer Rush"
 plex-enhancer preview artist --artist "Jennifer Rush" --json
+plex-enhancer preview artist --artist "Jennifer Rush" --verbose
+plex-enhancer preview artist --artist "Jennifer Rush" --save
 ```
+
+`--verbose` zeigt die vollständige Künstlerdiagnose mit Plex-Biografie, MusicBrainz,
+Wikipedia, Discogs, Last.fm, Faktenprüfung, Stilbewertung, Qualitätsanalyse und Prompt-Daten.
+`--save` speichert die Vorschau unter `exports/previews/artists/`.
+
+Die Diagnose unterscheidet `available`, `missing` und `unknown`. Karrierejahre werden nicht aus
+Geburtsdaten abgeleitet. Discogs wird nur angezeigt, wenn es zusätzliche Informationen liefert;
+andernfalls steht dort `No additional artist information available.`.
+Außerdem zeigt `--verbose` das Prompt-Budget, die ursprüngliche und gekürzte Promptgröße sowie die
+Beiträge der einzelnen Quellen.
 
 ## 5.17 `review`
 
@@ -286,4 +298,3 @@ plex-enhancer cache clear
 | Plex-Konfiguration fehlt | `plex-enhancer login` |
 | Album fehlt | Schreibweise und Bibliothek prüfen |
 | Apply blockiert | Review-Qualität prüfen |
-

@@ -9,6 +9,11 @@ from pydantic import SecretStr
 
 from plex_music_enhancer.ai import GeneratedSummary
 from plex_music_enhancer.apply import ApplyService, AuditStore, BackupStore
+from plex_music_enhancer.apply.service import (
+    _PlexAlbumLoader,
+    plex_metadata_path,
+    plex_metadata_url,
+)
 from plex_music_enhancer.enrichment import (
     AlbumContext,
     MusicBrainzAlbumContext,
@@ -60,6 +65,8 @@ def test_apply_service_keeps_backup_when_write_fails(tmp_path: Path) -> None:
     assert Path(result.backup_path).exists()
     assert Path(result.audit_path).exists()
     assert "Save failed" in result.message
+    assert "Attempted URL: http://localhost:32400/library/metadata/42" in result.message
+    assert "Underlying exception: Save failed" in result.message
 
 
 def test_apply_service_reports_failed_verification(tmp_path: Path) -> None:
@@ -186,6 +193,71 @@ def test_apply_service_allows_editorial_warnings_with_high_score(tmp_path: Path)
     assert album.calls == ["batchEdits", "editSummary", "saveEdits", "reload"]
 
 
+def test_plex_metadata_url_handles_base_without_trailing_slash() -> None:
+    """Plex metadata URLs must not concatenate rating keys onto the port."""
+    assert (
+        plex_metadata_url("http://192.168.178.10:32400", "5069")
+        == "http://192.168.178.10:32400/library/metadata/5069"
+    )
+
+
+def test_plex_metadata_url_handles_base_with_trailing_slash() -> None:
+    """Trailing slashes in the configured Plex base URL should be harmless."""
+    assert (
+        plex_metadata_url("http://192.168.178.10:32400/", "5069")
+        == "http://192.168.178.10:32400/library/metadata/5069"
+    )
+
+
+def test_plex_metadata_path_supports_album_and_artist_keys() -> None:
+    """Album and artist rating keys use the same Plex metadata endpoint shape."""
+    assert plex_metadata_path("5069") == "/library/metadata/5069"
+    assert plex_metadata_path("100") == "/library/metadata/100"
+    assert plex_metadata_path("/library/metadata/5069") == "/library/metadata/5069"
+
+
+def test_plex_album_loader_fetches_metadata_path_without_trailing_slash(monkeypatch) -> None:
+    """The loader should pass a proper Plex metadata path to plexapi."""
+    fake_server = RecordingPlexServer()
+    monkeypatch.setattr("plex_music_enhancer.apply.service.PlexServer", fake_server.factory)
+
+    loader = _PlexAlbumLoader("http://192.168.178.10:32400", SecretStr("secret-token"))
+    album = loader("5069")
+
+    assert isinstance(album, FakeAlbum)
+    assert fake_server.base_url == "http://192.168.178.10:32400"
+    assert fake_server.fetched_keys == ["/library/metadata/5069"]
+
+
+def test_plex_album_loader_fetches_metadata_path_with_trailing_slash(monkeypatch) -> None:
+    """The loader should normalize a Plex base URL that already has a slash."""
+    fake_server = RecordingPlexServer()
+    monkeypatch.setattr("plex_music_enhancer.apply.service.PlexServer", fake_server.factory)
+
+    loader = _PlexAlbumLoader("http://192.168.178.10:32400/", SecretStr("secret-token"))
+    loader("5069")
+
+    assert fake_server.base_url == "http://192.168.178.10:32400"
+    assert fake_server.fetched_keys == ["/library/metadata/5069"]
+
+
+def test_plex_album_loader_reports_attempted_url_and_underlying_exception(monkeypatch) -> None:
+    """Malformed plexapi URL errors should include actionable diagnostics."""
+    fake_server = RecordingPlexServer(fetch_error=ValueError("Failed to parse: bad-url"))
+    monkeypatch.setattr("plex_music_enhancer.apply.service.PlexServer", fake_server.factory)
+    loader = _PlexAlbumLoader("http://192.168.178.10:32400", SecretStr("secret-token"))
+
+    try:
+        loader("5069")
+    except Exception as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("loader should raise")
+
+    assert "Attempted URL: http://192.168.178.10:32400/library/metadata/5069" in message
+    assert "Underlying exception: Failed to parse: bad-url" in message
+
+
 def test_backup_store_creates_backup_file(tmp_path: Path) -> None:
     """BackupStore should persist the previous summary under exports/backups style paths."""
     store = BackupStore(directory=tmp_path / "exports" / "backups")
@@ -283,6 +355,30 @@ class FakeAlbum:
         if self._reload_summary is not None:
             return FakeAlbum(summary=self._reload_summary)
         return self
+
+
+class RecordingPlexServer:
+    """Record how _PlexAlbumLoader calls plexapi."""
+
+    def __init__(self, fetch_error: Exception | None = None) -> None:
+        """Create a recording fake Plex server factory."""
+        self.fetch_error = fetch_error
+        self.base_url: str | None = None
+        self.token: str | None = None
+        self.fetched_keys: list[str] = []
+
+    def factory(self, base_url: str, token: str) -> RecordingPlexServer:
+        """Return this object like a PlexServer constructor."""
+        self.base_url = base_url
+        self.token = token
+        return self
+
+    def fetchItem(self, key: str) -> FakeAlbum:  # noqa: N802
+        """Record the fetched key and return a fake album."""
+        self.fetched_keys.append(key)
+        if self.fetch_error is not None:
+            raise self.fetch_error
+        return FakeAlbum(summary="Aktuelle Plex-Zusammenfassung.")
 
 
 class FailingBackupStore(BackupStore):

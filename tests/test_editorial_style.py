@@ -90,3 +90,33 @@ def test_style_engine_varies_repeated_album_sentence_starts() -> None:
 
     assert result.text.count("Das Album") == 1
     assert "Musikalisch verbindet Jazz und Blues." in result.text
+
+
+def test_style_engine_detects_artist_biography_issues() -> None:
+    """Artist biographies should report generic openings and jumpy chronology."""
+    diagnostics = GermanEditorialStyleEngine().analyze(
+        "Nina Simone ist eine Sängerin und ist bekannt für Jazz. "
+        "Sie wurde 1970 international erwähnt, war 1954 bereits aktiv und blieb 1965 präsent. "
+        "Sie ist Musikerin, war Pianistin und wurde bekannt durch mehrere Aufnahmen.",
+        artist="Nina Simone",
+    )
+
+    assert "WEAK_ARTIST_OPENING" in diagnostics.issues
+    assert "GENERIC_BIOGRAPHY" in diagnostics.issues
+    assert "CHRONOLOGICAL_JUMPS" in diagnostics.issues
+    assert "SIMPLE_VERB_OVERUSE" in diagnostics.issues
+
+
+def test_style_engine_rewards_stronger_artist_narrative() -> None:
+    """Artist biographies with narrative flow should avoid artist-specific issue codes."""
+    diagnostics = GermanEditorialStyleEngine().analyze(
+        "Als klassisch ausgebildete Pianistin verband Nina Simone Jazz, Soul und Blues "
+        "mit einer unverwechselbaren interpretatorischen Strenge. Nach frühen Auftritten "
+        "entwickelte sie ein Repertoire, das musikalische Präzision mit politischem "
+        "Bewusstsein verband und ihre Rolle innerhalb der afroamerikanischen "
+        "Musikgeschichte sichtbar machte.",
+        artist="Nina Simone",
+    )
+
+    assert "WEAK_ARTIST_OPENING" not in diagnostics.issues
+    assert "GENERIC_BIOGRAPHY" not in diagnostics.issues

@@ -1,5 +1,6 @@
 """Interactive generated metadata review workflow."""
 
+from plex_music_enhancer.review.debug import ReviewDebugContext, ReviewDebugLogger
 from plex_music_enhancer.review.diff import unified_summary_diff
 from plex_music_enhancer.review.models import (
     QualityReport,
@@ -15,6 +16,8 @@ __all__ = [
     "QualityReport",
     "QualityStatus",
     "ReviewPolicyResult",
+    "ReviewDebugContext",
+    "ReviewDebugLogger",
     "ReviewDocument",
     "ReviewError",
     "ReviewLimits",

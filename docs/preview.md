@@ -4,6 +4,7 @@ The preview command runs the first end-to-end enrichment flow without modifying 
 
 ```text
 plex-enhancer preview --artist "Artist" --album "Album"
+plex-enhancer preview artist --artist "Artist"
 ```
 
 Options:
@@ -15,6 +16,9 @@ Options:
 - `--verbose` shows full Plex, MusicBrainz, Wikipedia, prompt, token, and timing diagnostics.
 - `--translate` translates the current Plex summary into natural German.
 - `--improve` improves an existing German Plex summary without changing factual content.
+
+`preview artist` supports `--provider`, `--model`, `--json`, `--save`, and `--verbose` as well.
+Artist preview JSON is saved under `exports/previews/artists/`.
 
 ## Workflow
 
@@ -62,6 +66,15 @@ Use `--verbose` to also show:
 - `PROMPT`: prompt name, version, and variables used.
 - Detailed `AI`: token usage and generation time.
 
+For artist previews, `--verbose` additionally shows Discogs and Last.fm context, artist fact
+verification, editorial quality, style analysis, knowledge-builder output, and context-builder
+status.
+
+Verbose output also reports the prompt budget, original prompt size, final prompt size and
+per-source contribution. Oversized prompts are trimmed automatically before AI generation, using
+this priority order: verified structured metadata, Knowledge Builder, Wikipedia, Discogs, Last.fm,
+then the existing Plex biography.
+
 ## Prompt Behavior
 
 The production album prompt asks the configured model to:
@@ -76,6 +89,10 @@ The production album prompt asks the configured model to:
 
 If the supplied information is insufficient, the generated text should state only verifiable facts.
 
+The production artist biography prompt asks for an idiomatic German biography of roughly 120-180
+words. It favors narrative prose, musical or historical significance, and only the most important
+verified milestones when those facts are supplied.
+
 ## Saved Preview
 
 Saved preview JSON includes:
@@ -84,6 +101,9 @@ Saved preview JSON includes:
 - `rendered_prompt`: the exact `RenderedPrompt`
 - `generated_summary`: the provider output
 - `generation_time_seconds`: measured generation time
+- artist previews also include `style_diagnostics` and any generated editorial QA report
+- `rendered_prompt.budget_diagnostics`: prompt budget, final size, trimmed size and source
+  contributions
 
 ## Safety
 

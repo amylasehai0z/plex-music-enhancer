@@ -241,6 +241,15 @@ class Settings(BaseSettings):
             values["_env_file"] = None
 
         super().__init__(**values)
+        default_prompt_budget = AISettings().max_prompt_characters
+        legacy_prompt_budget = environ.get("AI_PROMPT_MAX_CHARS") or _dotenv_value(
+            "AI_PROMPT_MAX_CHARS",
+            values.get("_env_file", ".env"),
+        )
+        if self.ai.max_prompt_characters == default_prompt_budget and legacy_prompt_budget:
+            ai_values = self.ai.model_dump()
+            ai_values["max_prompt_characters"] = int(legacy_prompt_budget)
+            self.ai = AISettings(**ai_values)
 
     @property
     def has_plex_configuration(self) -> bool:
@@ -251,6 +260,21 @@ class Settings(BaseSettings):
 def _running_under_pytest() -> bool:
     """Return whether the current process is executing a pytest test case."""
     return "PYTEST_CURRENT_TEST" in environ
+
+
+def _dotenv_value(key: str, env_file: object) -> str | None:
+    """Return one simple key from a dotenv file when dotenv loading is enabled."""
+    if env_file is None:
+        return None
+    path = Path(str(env_file))
+    if not path.exists():
+        return None
+    prefix = f"{key}="
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith(prefix):
+            return stripped[len(prefix) :].strip().strip("\"'")
+    return None
 
 
 @lru_cache

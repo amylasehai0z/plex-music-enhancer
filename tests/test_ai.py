@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -23,12 +24,18 @@ from plex_music_enhancer.ai.dummy import DUMMY_SUMMARY_TEXT
 from plex_music_enhancer.config import AISettings
 from plex_music_enhancer.enrichment import (
     AlbumContext,
+    ArtistContext,
+    LastFMArtistContext,
     MusicBrainzAlbumContext,
+    MusicBrainzArtistContext,
     PipelineContext,
     PlexAlbumContext,
+    PlexArtistContext,
     WikipediaAlbumContext,
+    WikipediaArtistContext,
 )
 from plex_music_enhancer.prompts import RenderedPrompt
+from plex_music_enhancer.verification import FactVerifier
 
 
 def test_generated_summary_model_validates_confidence() -> None:
@@ -206,6 +213,31 @@ def test_openai_provider_generates_summary_from_rendered_prompt() -> None:
     }
 
 
+def test_openai_provider_dumps_exact_prompt_for_debugging() -> None:
+    """OpenAIProvider should write the exact request prompt to the temporary debug file."""
+    dump_path = Path("/tmp/openai_prompt.txt")  # noqa: S108 - required debug dump path.
+    dump_path.write_text("old prompt", encoding="utf-8")
+    client = FakeOpenAIClient(
+        [
+            SimpleNamespace(
+                output_text="Generated album summary.",
+                usage=SimpleNamespace(input_tokens=100, output_tokens=25),
+                status="completed",
+            )
+        ]
+    )
+    provider = OpenAIProvider(settings=_openai_settings(), client=client)
+    prompt = _rendered_prompt(
+        name="album_summary",
+        rendered_text="Rendered prompt text\nmit Umlauten äöü.",
+    )
+
+    provider.generate_album_summary(prompt)
+
+    assert client.responses.requests[0]["input"] == prompt.rendered_text
+    assert dump_path.read_text(encoding="utf-8") == client.responses.requests[0]["input"]
+
+
 def test_openai_provider_retries_transient_failures() -> None:
     """OpenAIProvider should retry transient SDK failures."""
     transient = FakeSDKError("rate limited", status_code=429)
@@ -228,6 +260,42 @@ def test_openai_provider_retries_transient_failures() -> None:
     assert summary.metadata["completion_tokens"] == 5
     assert summary.metadata["finish_reason"] == "stop"
     assert len(client.responses.requests) == 2
+
+
+@pytest.mark.parametrize("artist_name", ["ABBA", "Queen", "The Beatles"])
+def test_ai_manager_budgets_large_artist_prompt_before_openai_generation(
+    artist_name: str,
+) -> None:
+    """Large artist contexts should be trimmed automatically before OpenAI validation."""
+    client = FakeOpenAIClient(
+        [
+            SimpleNamespace(
+                output_text="Generierte ABBA-Biografie.",
+                usage=SimpleNamespace(input_tokens=300, output_tokens=80),
+                status="completed",
+            )
+        ]
+    )
+    provider = OpenAIProvider(
+        settings=_openai_settings(max_prompt_characters=20_000),
+        client=client,
+        clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    manager = AIManager(
+        settings=_openai_settings(max_prompt_characters=20_000),
+        provider=provider,
+    )
+
+    summary = manager.generate_artist_summary(_large_artist_context(artist_name))
+
+    sent_prompt = client.responses.requests[0]["input"]
+    assert summary.text == "Generierte ABBA-Biografie."
+    assert len(sent_prompt) <= 20_000
+    assert artist_name in sent_prompt
+    assert "Verified facts" in sent_prompt
+    assert f"Existing Plex biography paragraph 0 about {artist_name}" in sent_prompt
+    assert f"Existing Plex biography paragraph 179 about {artist_name}" in sent_prompt
+    assert "omitted because it exceeds" not in sent_prompt
 
 
 def test_openai_provider_requires_api_key(monkeypatch) -> None:
@@ -310,6 +378,64 @@ def _album_context() -> AlbumContext:
             ready_for_generation=True,
         ),
     )
+
+
+def _large_artist_context(artist_name: str) -> ArtistContext:
+    """Return an oversized artist context resembling a large public artist."""
+    long_wikipedia = "\n\n".join(
+        f"{artist_name} Wikipedia paragraph {index}. "
+        "The artist had extensive international context."
+        for index in range(180)
+    )
+    long_lastfm = "\n\n".join(
+        f"Last.fm community biography paragraph {index} about {artist_name}."
+        for index in range(160)
+    )
+    long_plex = "\n\n".join(
+        f"Existing Plex biography paragraph {index} about {artist_name}." for index in range(180)
+    )
+    context = ArtistContext(
+        plex=PlexArtistContext(
+            rating_key=artist_name.casefold().replace(" ", "-"),
+            artist=artist_name,
+            summary=long_plex,
+            genres=["Pop"],
+            country="SE",
+        ),
+        musicbrainz=MusicBrainzArtistContext(
+            artist_mbid=f"{artist_name.casefold()}-mbid",
+            artist_name=artist_name,
+            country="SE",
+            genres=["pop", "europop"],
+            begin_date="1972",
+            aliases=["Björn & Benny, Agnetha & Anni-Frid"],
+            confidence=100,
+        ),
+        wikipedia=WikipediaArtistContext(
+            language="de",
+            title=artist_name,
+            extract=long_wikipedia,
+            page_url=f"https://de.wikipedia.org/wiki/{artist_name.replace(' ', '_')}",
+        ),
+        lastfm=LastFMArtistContext(
+            biography=long_lastfm,
+            short_biography="ABBA war eine schwedische Popgruppe.",
+            tags=["pop", "swedish pop"],
+        ),
+        pipeline=PipelineContext(
+            collected_sources=["plex", "musicbrainz", "wikipedia", "lastfm"],
+            ready_for_generation=True,
+        ),
+        full_name=artist_name,
+        active_years="1972–1982",
+        genres=["pop", "europop"],
+        notable_albums=["Arrival", "The Album", "Voulez-Vous"],
+        milestones=["Eurovision Song Contest 1974"],
+        historical_context=long_wikipedia,
+        career_summary="ABBA war eine international erfolgreiche schwedische Popgruppe.",
+        biography=long_wikipedia,
+    )
+    return context.model_copy(update={"fact_collection": FactVerifier().verify_artist(context)})
 
 
 def _rendered_prompt(

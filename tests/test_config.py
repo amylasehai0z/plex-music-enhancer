@@ -19,6 +19,28 @@ def test_settings_load_from_environment(monkeypatch) -> None:
     assert settings.has_plex_configuration is True
 
 
+def test_settings_support_legacy_prompt_budget_environment(monkeypatch) -> None:
+    """AI_PROMPT_MAX_CHARS should override the default prompt budget."""
+    monkeypatch.delenv("PLEX_ENHANCER_AI__MAX_PROMPT_CHARACTERS", raising=False)
+    monkeypatch.setenv("AI_PROMPT_MAX_CHARS", "30000")
+
+    settings = Settings()
+
+    assert settings.ai.max_prompt_characters == 30000
+
+
+def test_settings_support_legacy_prompt_budget_dotenv(monkeypatch, tmp_path: Path) -> None:
+    """AI_PROMPT_MAX_CHARS should work from explicit dotenv files."""
+    monkeypatch.delenv("PLEX_ENHANCER_AI__MAX_PROMPT_CHARACTERS", raising=False)
+    monkeypatch.delenv("AI_PROMPT_MAX_CHARS", raising=False)
+    monkeypatch.chdir(tmp_path)
+    Path(".env").write_text("AI_PROMPT_MAX_CHARS=31000\n", encoding="utf-8")
+
+    settings = Settings(_env_file=".env")
+
+    assert settings.ai.max_prompt_characters == 31000
+
+
 def test_settings_ignore_dotenv_during_tests(monkeypatch, tmp_path: Path) -> None:
     """Settings should not inherit developer-local dotenv files during tests."""
     monkeypatch.delenv("PLEX_ENHANCER_PLEX_URL", raising=False)

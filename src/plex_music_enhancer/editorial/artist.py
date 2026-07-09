@@ -11,12 +11,14 @@ from plex_music_enhancer.verification import FactVerifier, VerificationState
 from plex_music_enhancer.verification.models import FactCollection, VerifiedFact
 
 SOURCE_WEIGHTS = {
-    "plex": 25,
     "musicbrainz": 35,
     "wikipedia": 32,
     "discogs": 25,
     "lastfm": 14,
+    "plex": 8,
 }
+LONG_PROSE_FACT_CATEGORIES = {"biography", "career_summary", "historical_context"}
+MAX_PROSE_FACT_CHARS = 500
 
 
 class ArtistEditorialComposer:
@@ -121,12 +123,6 @@ def _add_identity_facts(facts: _FactCollector, context: ArtistContext) -> None:
         text=context.full_name or context.plex.artist,
         sources=["musicbrainz" if context.musicbrainz.artist_name else "plex"],
     )
-    facts.add(
-        "career_context",
-        topic="aliases",
-        text=f"Aliases: {', '.join(context.aliases)}" if context.aliases else None,
-        sources=["musicbrainz", "discogs"],
-    )
 
 
 def _add_origin_facts(facts: _FactCollector, context: ArtistContext) -> None:
@@ -162,13 +158,18 @@ def _add_career_facts(facts: _FactCollector, context: ArtistContext) -> None:
     facts.add(
         "career_context",
         topic="career_summary",
-        text=context.career_summary,
+        text=_unique_text(context.career_summary, context.wikipedia.extract, context.biography),
         sources=["wikipedia", "lastfm"],
     )
     facts.add(
         "career_context",
         topic="biography",
-        text=context.biography,
+        text=_unique_text(
+            context.biography,
+            context.career_summary,
+            context.historical_context,
+            context.wikipedia.extract,
+        ),
         sources=["wikipedia", "lastfm", "discogs"],
     )
     for milestone in context.milestones:
@@ -176,12 +177,6 @@ def _add_career_facts(facts: _FactCollector, context: ArtistContext) -> None:
 
 
 def _add_style_facts(facts: _FactCollector, context: ArtistContext) -> None:
-    facts.add(
-        "musical_style",
-        topic="genres",
-        text=f"Genres: {', '.join(context.genres)}" if context.genres else None,
-        sources=["musicbrainz", "plex", "discogs", "lastfm"],
-    )
     facts.add(
         "musical_style",
         topic="styles",
@@ -207,7 +202,12 @@ def _add_influence_facts(facts: _FactCollector, context: ArtistContext) -> None:
     facts.add(
         "influence_context",
         topic="historical_context",
-        text=context.historical_context,
+        text=_unique_text(
+            context.historical_context,
+            context.wikipedia.extract,
+            context.biography,
+            context.career_summary,
+        ),
         sources=["wikipedia"],
     )
 
@@ -218,7 +218,11 @@ def _add_legacy_facts(facts: _FactCollector, context: ArtistContext) -> None:
     facts.add(
         "legacy_context",
         topic="lastfm_context",
-        text=context.lastfm.short_biography,
+        text=_unique_text(
+            context.lastfm.short_biography,
+            context.career_summary,
+            context.biography,
+        ),
         sources=["lastfm"],
     )
 
@@ -268,7 +272,8 @@ def _writing_guidance() -> list[str]:
         "write as a German music encyclopedia biography",
         "begin with verified identity and career context",
         "connect origins, style, career development, and legacy naturally",
-        "emphasize verified facts and treat weak facts as background only",
+        "prioritize verified metadata, knowledge facts, Wikipedia, Discogs, Last.fm, then Plex",
+        "emphasize verified facts and high-confidence probable facts",
         "never resolve conflicting facts by guessing",
         "avoid fan language, marketing tone, and isolated fact lists",
     ]
@@ -289,10 +294,16 @@ def _facts_by_state(
     facts = [
         fact
         for fact in collection.by_state(state)
-        if fact.value and fact.verification_state != VerificationState.CONFLICTING
+        if fact.value
+        and fact.verification_state != VerificationState.CONFLICTING
+        and not (fact.category == "biography" and fact.preferred_source == "plex")
+        and not _is_oversized_prose_fact(fact)
     ]
     return (
-        sorted(facts, key=lambda fact: (-fact.confidence_score, fact.category, fact.value)) or None
+        _dedupe_verified_facts(
+            sorted(facts, key=lambda fact: (-fact.confidence_score, fact.category, fact.value))
+        )
+        or None
     )
 
 
@@ -319,6 +330,41 @@ def _sort_facts(facts: Iterable[EditorialFact]) -> list[EditorialFact]:
 def _fact_key(*, topic: str, text: str) -> str:
     """Return a dedupe key."""
     return f"{topic}:{sub(r'\s+', ' ', text.casefold()).strip()}"
+
+
+def _unique_text(value: str | None, *duplicates: str | None) -> str | None:
+    """Return text only when it is not already represented elsewhere."""
+    if not value:
+        return None
+    normalized = _normalize(value)
+    return value if all(_normalize(item) != normalized for item in duplicates if item) else None
+
+
+def _is_oversized_prose_fact(fact: VerifiedFact) -> bool:
+    """Return whether a non-verified prose fact is too large for compact prompt context."""
+    return (
+        fact.category in LONG_PROSE_FACT_CATEGORIES
+        and fact.verification_state != VerificationState.VERIFIED
+        and len(fact.value) > MAX_PROSE_FACT_CHARS
+    )
+
+
+def _dedupe_verified_facts(facts: Iterable[VerifiedFact]) -> list[VerifiedFact]:
+    """Return facts without repeated provider values."""
+    seen: set[tuple[str, str]] = set()
+    result: list[VerifiedFact] = []
+    for fact in facts:
+        key = (fact.category, _normalize(fact.value))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(fact)
+    return result
+
+
+def _normalize(value: str) -> str:
+    """Normalize text for duplicate comparisons."""
+    return sub(r"\s+", " ", value.casefold()).strip()
 
 
 def _dedupe(values: Iterable[str]) -> list[str]:

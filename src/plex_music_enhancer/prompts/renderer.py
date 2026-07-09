@@ -20,6 +20,7 @@ class RenderedPrompt(BaseModel):
     rendered_text: str
     variables: dict[str, str] = Field(default_factory=dict)
     template: str
+    budget_diagnostics: dict[str, Any] | None = None
 
 
 class PromptRenderer:

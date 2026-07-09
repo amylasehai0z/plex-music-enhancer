@@ -9,6 +9,7 @@ from plex_music_enhancer.planner import EnrichmentPlanner
 from plex_music_enhancer.review.diff import unified_summary_diff
 from plex_music_enhancer.review.models import QualityReport, ReviewDocument, ReviewLimits
 from plex_music_enhancer.services import (
+    ArtistPreviewDocument,
     EnrichmentPreviewDocument,
     EnrichmentPreviewService,
     PreviewError,
@@ -82,7 +83,7 @@ class ReviewService:
 
     def _document_from_preview(
         self,
-        preview: EnrichmentPreviewDocument,
+        preview: EnrichmentPreviewDocument | ArtistPreviewDocument,
         proposed_summary: str,
         *,
         edited: bool,
@@ -108,7 +109,10 @@ class ReviewService:
             current_summary=current_summary,
             proposed_summary=final_summary,
             diff=unified_summary_diff(current_summary, final_summary),
-            quality=validate_summary_quality(final_summary, limits=self._limits),
+            quality=validate_summary_quality(
+                final_summary,
+                limits=_review_limits_for_preview(preview, self._limits),
+            ),
             style=style,
             edited=edited,
             plan=self._planner.plan_summary(current_summary),
@@ -181,6 +185,16 @@ def validate_summary_quality(summary: str, *, limits: ReviewLimits | None = None
         failures=failures,
         word_count=word_count,
     )
+
+
+def _review_limits_for_preview(
+    preview: EnrichmentPreviewDocument | ArtistPreviewDocument,
+    configured_limits: ReviewLimits,
+) -> ReviewLimits:
+    """Return target length limits for album summaries or artist biographies."""
+    if isinstance(preview, ArtistPreviewDocument) and configured_limits == ReviewLimits():
+        return ReviewLimits(minimum_words=160, maximum_words=280)
+    return configured_limits
 
 
 def _looks_german(text: str) -> bool:

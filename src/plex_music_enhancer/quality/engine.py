@@ -80,9 +80,14 @@ class EditorialQualityEngine:
         """Analyze one generated text against available context."""
         text = generated_text.strip()
         style = self._style_engine.analyze(text, artist=artist, album=album)
-        mentioned_topics = [topic for topic in topics if _mentions_any(text, topic.values)]
+        recommendable_topics = _recommendable_topics(topics, context)
+        mentioned_topics = [
+            topic for topic in recommendable_topics if _mentions_any(text, topic.values)
+        ]
         omitted_topics = [
-            topic for topic in topics if topic.recommended and topic not in mentioned_topics
+            topic
+            for topic in recommendable_topics
+            if topic.recommended and topic not in mentioned_topics
         ]
         verification = _verification_metrics(context, text)
         metadata_coverage = _metadata_coverage(topics, mentioned_topics, omitted_topics)
@@ -133,10 +138,18 @@ class EditorialQualityEngine:
 class _Topic:
     """Internal available metadata topic."""
 
-    def __init__(self, name: str, values: Iterable[object], *, recommended: bool = True) -> None:
+    def __init__(
+        self,
+        name: str,
+        values: Iterable[object],
+        *,
+        recommended: bool = True,
+        categories: Iterable[str] | None = None,
+    ) -> None:
         self.name = name
         self.values = _values(values)
         self.recommended = recommended
+        self.categories = list(categories or [name.replace(" ", "_")])
 
 
 def _album_topics(context: AlbumContext) -> list[_Topic]:
@@ -170,20 +183,71 @@ def _artist_topics(context: ArtistContext) -> list[_Topic]:
     return [
         _Topic("artist", [context.plex.artist, context.full_name]),
         _Topic("aliases", context.aliases),
-        _Topic("birth date", [context.birth_date]),
-        _Topic("death date", [context.death_date]),
-        _Topic("origin", [context.origin, context.nationality, context.plex.country]),
-        _Topic("active years", [context.active_years]),
+        _Topic("birth date", [context.birth_date], categories=["birth_date"]),
+        _Topic("death date", [context.death_date], categories=["death_date"]),
+        _Topic(
+            "origin",
+            [context.origin, context.nationality, context.plex.country],
+            categories=["origin", "nationality"],
+        ),
+        _Topic("active years", [context.active_years], categories=["active_years"]),
         _Topic("genres", [*context.genres, *context.musicbrainz.genres, *context.plex.genres]),
         _Topic("styles", context.styles),
         _Topic("members", context.members),
-        _Topic("associated acts", context.associated_acts),
-        _Topic("career summary", [context.career_summary]),
-        _Topic("historical context", [context.historical_context]),
-        _Topic("notable albums", context.notable_albums),
+        _Topic("associated acts", context.associated_acts, categories=["associated_acts"]),
+        _Topic("labels", context.labels),
+        _Topic("career summary", [context.career_summary], categories=["career_summary"]),
+        _Topic(
+            "career progression",
+            [context.active_years, *context.milestones],
+            categories=["active_years", "milestones"],
+        ),
+        _Topic(
+            "historical context",
+            [context.historical_context],
+            categories=["historical_context"],
+        ),
+        _Topic("important albums", context.notable_albums, categories=["notable_albums"]),
+        _Topic(
+            "major works",
+            [*context.notable_albums, *context.milestones],
+            categories=["notable_albums", "milestones"],
+        ),
+        _Topic(
+            "legacy",
+            [*context.awards, *context.influenced_artists],
+            categories=["awards", "influenced_artists"],
+        ),
         _Topic("awards", context.awards),
         _Topic("milestones", context.milestones),
     ]
+
+
+def _recommendable_topics(topics: list[_Topic], context: Any) -> list[_Topic]:
+    """Return topics with populated, sufficiently reliable supporting facts."""
+    collection = getattr(context, "fact_collection", None)
+    if collection is None:
+        return [topic for topic in topics if topic.values]
+
+    return [
+        topic for topic in topics if topic.values and _topic_has_reliable_fact(topic, collection)
+    ]
+
+
+def _topic_has_reliable_fact(topic: _Topic, collection: Any) -> bool:
+    """Return whether a topic has verified or high-confidence probable support."""
+    for category in topic.categories:
+        for fact in collection.by_category(category):
+            if not fact.value:
+                continue
+            if fact.verification_state == VerificationState.VERIFIED:
+                return True
+            if (
+                fact.verification_state == VerificationState.PROBABLE
+                and fact.confidence_score >= 0.80
+            ):
+                return True
+    return False
 
 
 def _verification_metrics(context: Any, text: str) -> VerificationMetrics:
@@ -485,7 +549,7 @@ def _recommendations(
     """Return deterministic improvement recommendations."""
     recommendations = [
         QualityRecommendation(
-            message=f"{topic.name.title()} available but not mentioned.",
+            message=_recommendation_message(topic.name),
             category=QualityCategory.COMPLETENESS,
             priority=3,
         )
@@ -500,6 +564,23 @@ def _recommendations(
         for fact in metrics.verified_facts_omitted[:8]
     )
     return recommendations
+
+
+def _recommendation_message(topic_name: str) -> str:
+    """Return a stable, user-facing recommendation for omitted context."""
+    messages = {
+        "notable tracks": "Notable tracks available but not mentioned.",
+        "important albums": "Important albums available but not mentioned.",
+        "major works": "Major works available but not mentioned.",
+        "historical context": "Historical context available but not mentioned.",
+        "career progression": "Career milestones available but not mentioned.",
+        "associated acts": "Associated artists available but not mentioned.",
+        "genres": "Genres available but not mentioned.",
+        "styles": "Musical style information available but not mentioned.",
+        "labels": "Label information available but not mentioned.",
+        "legacy": "Legacy context available but not mentioned.",
+    }
+    return messages.get(topic_name, f"{topic_name.title()} available but not mentioned.")
 
 
 def _values(values: Iterable[object]) -> list[str]:

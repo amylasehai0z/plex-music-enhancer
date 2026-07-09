@@ -28,13 +28,17 @@ class ReviewRenderer:
             self._console.print("[bold]↓[/bold]")
         self._console.rule(generated_label)
         self._console.print(document.proposed_summary or "[dim]No generated summary.[/dim]")
-        self._console.rule("UNIFIED DIFF")
-        self._console.print(Panel(document.diff or "No changes.", expand=False))
+        self.render_diff(document)
         self.render_quality(document.quality)
         self.render_policy_summary(document)
         self.render_style(document)
         self.render_editorial_quality(document)
         self.render_verification(document)
+
+    def render_diff(self, document: ReviewDocument) -> None:
+        """Render the unified diff section."""
+        self._console.rule("UNIFIED DIFF")
+        self._console.print(Panel(document.diff or "No changes.", expand=False))
 
     def render_quality(self, report: QualityReport) -> None:
         """Render a quality report."""

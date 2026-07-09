@@ -16,9 +16,12 @@ from plex_music_enhancer.batch import BatchAlbumCandidate, BatchReviewOptions, B
 from plex_music_enhancer.cache import CacheKind, KnowledgeCacheStore
 from plex_music_enhancer.cli import DiagnosticCheck, app
 from plex_music_enhancer.constants import __version__
+from plex_music_enhancer.editorial import GermanEditorialStyleEngine
 from plex_music_enhancer.enrichment import (
     AlbumContext,
     ArtistContext,
+    DiscogsArtistContext,
+    LastFMArtistContext,
     MusicBrainzAlbumContext,
     MusicBrainzArtistContext,
     PipelineContext,
@@ -202,12 +205,26 @@ def _artist_preview_document() -> ArtistPreviewDocument:
                 extract="Wikipedia biography",
                 page_url="https://de.wikipedia.org/wiki/Nina_Simone",
             ),
+            discogs=DiscogsArtistContext(
+                profile="Discogs career profile",
+                active_years="1954-2003",
+                styles=["Vocal Jazz"],
+            ),
+            lastfm=LastFMArtistContext(
+                biography="Last.fm biography",
+                tags=["soul"],
+                listeners=1000,
+                playcount=2000,
+            ),
             pipeline=PipelineContext(
                 collected_sources=["plex", "musicbrainz", "wikipedia"],
                 missing_fields=[],
                 warnings=[],
                 ready_for_generation=True,
             ),
+            active_years="1954-2003",
+            styles=["Vocal Jazz"],
+            labels=["Philips"],
         ),
         rendered_prompt=RenderedPrompt(
             name="artist_summary",
@@ -215,6 +232,21 @@ def _artist_preview_document() -> ArtistPreviewDocument:
             rendered_text="Artist: Nina Simone\nLanguage: de\n",
             variables={"artist": "Nina Simone", "language": "de"},
             template="Artist: {{artist}}\nLanguage: {{language}}\n",
+            budget_diagnostics={
+                "max_characters": 20000,
+                "original_size": 42,
+                "final_size": 42,
+                "trimmed_size": 0,
+                "trimmed": False,
+                "per_source_contribution": [
+                    {
+                        "name": "artist",
+                        "original_size": 11,
+                        "final_size": 11,
+                        "trimmed": False,
+                    }
+                ],
+            },
         ),
         generated_summary=GeneratedSummary(
             language="de",
@@ -229,6 +261,46 @@ def _artist_preview_document() -> ArtistPreviewDocument:
             metadata={"artist": "Nina Simone"},
         ),
         generation_time_seconds=0.123,
+        style_diagnostics=GermanEditorialStyleEngine().analyze(
+            _german_summary(),
+            artist="Nina Simone",
+        ),
+        career_years="1954-2003",
+        source_availability={
+            "plex": "available",
+            "musicbrainz": "available",
+            "wikipedia": "available",
+            "discogs": "available",
+            "lastfm": "available",
+        },
+        editorial_recommendations=["Important albums available but not mentioned."],
+        resolved_prompt_variables={
+            "artist": "Nina Simone",
+            "genres": ["Jazz"],
+            "styles": ["Vocal Jazz"],
+            "career_years": "1954-2003",
+            "discogs_context": {
+                "profile": "Discogs career profile",
+                "active_years": "1954-2003",
+                "styles": ["Vocal Jazz"],
+            },
+            "lastfm_context": {"tags": ["soul"], "listeners": 1000, "playcount": 2000},
+            "wikipedia_extract": "Wikipedia biography",
+            "current_summary": "Current artist summary",
+        },
+        knowledge_summary={
+            "fact_count": 3,
+            "verified_count": 2,
+            "probable_count": 1,
+            "conflict_count": 0,
+            "missing_facts": [],
+        },
+        context_summary={
+            "collected_sources": ["plex", "musicbrainz", "wikipedia"],
+            "missing_fields": [],
+            "warnings": [],
+            "ready_for_generation": True,
+        },
     )
 
 
@@ -653,10 +725,119 @@ def test_preview_artist_command_renders_generated_biography(monkeypatch) -> None
 
     assert result.exit_code == 0
     assert "GENERATED BIOGRAPHY" in result.stdout
-    assert "Nina Simone" in result.stdout
+    assert "AI" in result.stdout
+    assert "dummy-v1" in result.stdout
+    assert "MUSICBRAINZ" not in result.stdout
+    assert "FACT VERIFICATION" not in result.stdout
+    assert "STYLE ANALYSIS" not in result.stdout
+
+
+def test_preview_artist_command_verbose_renders_diagnostics(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_artist(self, *, artist: str) -> ArtistPreviewDocument:
+            assert artist == "Nina Simone"
+            return _artist_preview_document()
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["preview", "artist", "--artist", "Nina Simone", "--verbose"],
+    )
+
+    assert result.exit_code == 0
     assert "MUSICBRAINZ" in result.stdout
+    assert "WIKIPEDIA" in result.stdout
+    assert "DISCOGS" in result.stdout
+    assert "LAST.FM" in result.stdout
     assert "FACT VERIFICATION" in result.stdout
     assert "STYLE ANALYSIS" in result.stdout
+    assert "EDITORIAL QUALITY" in result.stdout
+    assert "KNOWLEDGE BUILDER" in result.stdout
+    assert "CONTEXT BUILDER" in result.stdout
+    assert "Prompt variables" in result.stdout
+    assert "Prompt budget" in result.stdout
+    assert "Per-source contribution" in result.stdout
+    assert "Token usage" in result.stdout
+    assert "Career years" in result.stdout
+    assert "1954-2003" in result.stdout
+    assert "Discogs Context" in result.stdout
+    assert "Wikipedia Extract" in result.stdout
+    assert "Fact Count" in result.stdout
+    assert "Plex source" in result.stdout
+    assert "Discogs career profile" in result.stdout
+
+
+def test_preview_artist_command_discogs_fallback_avoids_duplicate_content(monkeypatch) -> None:
+    class FakePreviewService:
+        def preview_artist(self, *, artist: str) -> ArtistPreviewDocument:
+            assert artist == "Nina Simone"
+            document = _artist_preview_document()
+            variables = dict(document.resolved_prompt_variables)
+            variables.pop("discogs_context", None)
+            return document.model_copy(
+                update={
+                    "source_availability": {
+                        **document.source_availability,
+                        "discogs": "missing",
+                    },
+                    "resolved_prompt_variables": variables,
+                }
+            )
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["preview", "artist", "--artist", "Nina Simone", "--verbose"],
+    )
+
+    assert result.exit_code == 0
+    assert "No additional artist information available" in result.stdout
+
+
+def test_preview_artist_command_saves_json(monkeypatch, tmp_path: Path) -> None:
+    class FakePreviewService:
+        def preview_artist(self, *, artist: str) -> ArtistPreviewDocument:
+            assert artist == "Nina Simone"
+            return _artist_preview_document()
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls) -> datetime:
+            return datetime(2026, 7, 9, 12, 30, 45)
+
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_preview_service",
+        lambda provider_name=None, model=None: (FakePreviewService(), SecretStr("secret-token")),
+    )
+    monkeypatch.setattr("plex_music_enhancer.cli.datetime", FixedDateTime)
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["preview", "artist", "--artist", "Nina Simone", "--save"])
+
+    export_path = Path("exports/previews/artists/Artist-Preview-Nina-Simone-20260709-123045.json")
+    exported = export_path.read_text(encoding="utf-8")
+    assert result.exit_code == 0
+    assert export_path.exists()
+    assert '"context": {' in exported
+    assert '"rendered_prompt": {' in exported
+    assert '"generated_summary": {' in exported
+    assert '"style_diagnostics": {' in exported
+    assert '"budget_diagnostics": {' in exported
+    assert '"career_years": "1954-2003"' in exported
+    assert '"source_availability": {' in exported
+    assert '"editorial_recommendations": [' in exported
+    assert '"resolved_prompt_variables": {' in exported
+    assert '"knowledge_summary": {' in exported
+    assert '"context_summary": {' in exported
+    assert "Saved artist preview JSON" in result.stdout
 
 
 def test_preview_command_uses_translate_prompt(monkeypatch) -> None:

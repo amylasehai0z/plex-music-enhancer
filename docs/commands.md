@@ -158,6 +158,12 @@ Optionen:
 
 `--translate` und `--improve` dürfen nicht gemeinsam verwendet werden.
 
+Sehr große Kontexte werden vor dem AI-Aufruf automatisch auf das konfigurierte Prompt-Budget
+gekürzt. Mit `--verbose` zeigt die Vorschau Budget, ursprüngliche Größe, finale Größe und die
+Beiträge der einzelnen Quellen. Die kanonische Einstellung ist
+`PLEX_ENHANCER_AI__MAX_PROMPT_CHARACTERS`; `AI_PROMPT_MAX_CHARS` wird als kompatible Kurzform
+weiterhin akzeptiert.
+
 ## `preview artist`
 
 Erzeugt eine Künstlerbiografie als Vorschau.
@@ -165,7 +171,30 @@ Erzeugt eine Künstlerbiografie als Vorschau.
 ```bash
 plex-enhancer preview artist --artist "Jennifer Rush"
 plex-enhancer preview artist --artist "Jennifer Rush" --json
+plex-enhancer preview artist --artist "Jennifer Rush" --verbose
+plex-enhancer preview artist --artist "Jennifer Rush" --save
 ```
+
+Optionen:
+
+| Option | Bedeutung |
+| --- | --- |
+| `--provider` | AI-Anbieter überschreiben |
+| `--model` | Modell überschreiben |
+| `--json` | komplette JSON-Ausgabe |
+| `--save` | JSON unter `exports/previews/artists/` speichern |
+| `--verbose` | Provider-, Verifikations-, Qualitäts- und Stil-Diagnose anzeigen |
+
+Gespeicherte Künstler-Previews verwenden Dateinamen wie
+`Artist-Preview-Jennifer-Rush-YYYYMMDD-HHMMSS.json`.
+
+Die ausführliche Ausgabe zeigt nur belastbare Empfehlungen. Unbekannte oder leere Felder erzeugen
+keine Aufforderung, sie in die Biografie aufzunehmen. `Career years` wird nur aus tatsächlichen
+Karrierejahren gebildet und fällt nie auf Geburtsdaten zurück. Discogs zeigt ausschließlich
+zusätzliche Künstlerdaten; wenn keine eindeutigen Discogs-Informationen vorliegen, erscheint
+`No additional artist information available.`.
+Außerdem zeigt `--verbose` das Prompt-Budget, die ursprüngliche und gekürzte Promptgröße sowie die
+Beiträge der einzelnen Quellen.
 
 ## `review`
 
@@ -340,4 +369,3 @@ Zeigt:
 - Speicherverbrauch
 - Cache-Zustand
 - Empfehlungen
-

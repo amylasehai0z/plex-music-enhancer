@@ -16,9 +16,16 @@ Empfehlung: Verwenden Sie zuerst `preview`, bevor Sie `apply` nutzen.
 
 ```bash
 plex-enhancer preview artist --artist "Jennifer Rush"
+plex-enhancer preview artist --artist "Jennifer Rush" --verbose
+plex-enhancer preview artist --artist "Jennifer Rush" --save
 plex-enhancer review artist --artist "Jennifer Rush"
 plex-enhancer apply artist --artist "Jennifer Rush"
 ```
+
+Die Künstler-Preview erzeugt eine längere deutsche Biografie mit Karriereüberblick, musikalischem
+Stil und belegter Bedeutung. Mit `--verbose` sehen Sie Quellen, Faktenprüfung, Qualitätsbewertung
+und Stilanalyse. Mit `--save` wird das vollständige Preview-Dokument unter
+`exports/previews/artists/` gespeichert.
 
 ## 6.3 Ganze Bibliothek
 
@@ -116,4 +123,3 @@ v1.0 speichert Backups vor Apply. Ein automatischer Rollback-Befehl ist nicht de
 - `--verbose` bei unklaren Quellen verwenden.
 - JSON-Exporte bei Fehlern aufbewahren.
 - Review nie überspringen, wenn der Stil neu eingerichtet wurde.
-

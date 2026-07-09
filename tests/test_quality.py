@@ -5,6 +5,7 @@ from __future__ import annotations
 from plex_music_enhancer.enrichment import (
     AlbumContext,
     ArtistContext,
+    DiscogsArtistContext,
     MusicBrainzAlbumContext,
     MusicBrainzArtistContext,
     PipelineContext,
@@ -82,6 +83,54 @@ def test_quality_engine_analyzes_artist_biography() -> None:
     assert report.overall_score >= 70
     assert report.style_metrics["lexical_diversity"] is not None
     assert report.verification_metrics.verified_facts_mentioned
+
+
+def test_quality_engine_recommends_missing_artist_context() -> None:
+    """Artist QA should recommend available career, style, legacy, and work context."""
+    context = _artist_context().model_copy(
+        update={
+            "historical_context": "wichtige Stimme der Bürgerrechtsbewegung",
+            "associated_acts": ["Langston Hughes"],
+            "notable_albums": ["Pastel Blues"],
+            "milestones": ["Durchbruch in den 1960er Jahren"],
+            "genres": ["Jazz", "Soul"],
+        }
+    )
+    context = context.model_copy(update={"fact_collection": FactVerifier().verify_artist(context)})
+    text = (
+        "Nina Simone war eine US-amerikanische Musikerin. "
+        "Ihre Laufbahn wird hier bewusst knapp beschrieben."
+    )
+
+    report = EditorialQualityEngine().analyze_artist(context, text)
+    recommendations = [str(item) for item in report.recommendations]
+
+    assert "Historical context available but not mentioned." in recommendations
+    assert "Associated artists available but not mentioned." in recommendations
+    assert "Important albums available but not mentioned." in recommendations
+    assert "Career milestones available but not mentioned." in recommendations
+    assert "Genres available but not mentioned." in recommendations
+
+
+def test_quality_engine_filters_unknown_and_low_confidence_artist_recommendations() -> None:
+    """Unknown fields and low-confidence probable facts should not become recommendations."""
+    context = _artist_context().model_copy(
+        update={
+            "death_date": None,
+            "members": [],
+            "discogs": DiscogsArtistContext(members=["Discogs Member"]),
+        }
+    )
+    context = context.model_copy(update={"fact_collection": FactVerifier().verify_artist(context)})
+
+    report = EditorialQualityEngine().analyze_artist(
+        context,
+        "Nina Simone verband Jazz und Soul in einer eigenständigen musikalischen Sprache.",
+    )
+    recommendations = [str(item) for item in report.recommendations]
+
+    assert not any("Death Date available" in item for item in recommendations)
+    assert not any("Members available" in item for item in recommendations)
 
 
 def test_quality_engine_does_not_modify_generated_text() -> None:

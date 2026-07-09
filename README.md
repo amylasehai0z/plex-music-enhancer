@@ -72,6 +72,7 @@ PLEX_ENHANCER_PLEX_TOKEN=your-plex-token
 
 PLEX_ENHANCER_AI__PROVIDER=openai
 PLEX_ENHANCER_AI__MODEL=gpt-5.5
+PLEX_ENHANCER_AI__MAX_PROMPT_CHARACTERS=20000
 OPENAI_API_KEY=sk-...
 ```
 
@@ -92,6 +93,24 @@ plex-enhancer preview \
   --album "Credo" \
   --provider openai
 ```
+
+Artist biographies use the same safe preview path:
+
+```bash
+plex-enhancer preview artist \
+  --artist "Jennifer Rush" \
+  --provider openai \
+  --verbose
+```
+
+Verbose artist preview highlights source availability, verified facts, resolved prompt context,
+career years, Discogs-only additions, prompt budget diagnostics, style analysis and editorial
+recommendations. Saved artist previews include the same diagnostics as JSON under
+`exports/previews/artists/`.
+
+Large artist or album contexts are reduced automatically before generation. The Prompt Budget
+Manager preserves verified structured metadata first, trims long provider biographies at natural
+boundaries and reports source contributions in verbose preview output.
 
 ```bash
 plex-enhancer review \

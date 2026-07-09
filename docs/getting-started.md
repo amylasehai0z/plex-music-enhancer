@@ -166,12 +166,14 @@ Vorschau speichern:
 
 ```bash
 plex-enhancer preview --artist "Jennifer Rush" --album "Credo" --save
+plex-enhancer preview artist --artist "Jennifer Rush" --save
 ```
 
 Datei:
 
 ```text
 exports/previews/Jennifer-Rush-Credo.json
+exports/previews/artists/Artist-Preview-Jennifer-Rush-YYYYMMDD-HHMMSS.json
 ```
 
 ## 9. Was tun bei Fehlern?
@@ -189,4 +191,3 @@ Weiterführend:
 - [Befehlsreferenz](commands.md)
 - [Review-System](review-system.md)
 - [Problembehebung](troubleshooting.md)
-

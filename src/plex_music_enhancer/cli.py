@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from json import dumps
 from os import environ
 from pathlib import Path
@@ -70,6 +71,8 @@ from plex_music_enhancer.plex import (
 )
 from plex_music_enhancer.prompts import PromptRegistry
 from plex_music_enhancer.review import (
+    ReviewDebugContext,
+    ReviewDebugLogger,
     ReviewDocument,
     ReviewError,
     ReviewRenderer,
@@ -514,6 +517,14 @@ def preview_artist(
         bool,
         typer.Option("--json", help="Print the complete preview document as JSON."),
     ] = False,
+    save: Annotated[
+        bool,
+        typer.Option("--save", help="Save preview JSON under exports/previews/artists/."),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", help="Show full artist metadata, prompt, and diagnostics."),
+    ] = False,
 ) -> None:
     """Preview generated artist enrichment without modifying Plex."""
     if artist is None:
@@ -532,7 +543,12 @@ def preview_artist(
     if json_output:
         console.print_json(document.model_dump_json(indent=2))
     else:
-        _render_artist_preview(document)
+        _render_artist_preview(document, verbose=verbose)
+
+    if save:
+        export_path = _artist_preview_export_path(artist)
+        _write_scan_export(export_path, document)
+        console.print(f"[green]Saved artist preview JSON to {export_path}[/green]")
 
 
 @review_app.callback()
@@ -589,7 +605,11 @@ def review(
         console.print_json(document.model_dump_json(indent=2))
         return
 
-    _run_review_loop(service, document)
+    _run_review_loop(
+        service,
+        document,
+        ReviewDebugContext(artist=artist, album=album, provider=provider, model=model),
+    )
 
 
 @review_app.command(name="artist")
@@ -622,7 +642,11 @@ def review_artist(
         console.print_json(document.model_dump_json(indent=2))
         return
 
-    _run_review_loop(service, document)
+    _run_review_loop(
+        service,
+        document,
+        ReviewDebugContext(artist=artist, provider=provider, model=model),
+    )
 
 
 @apply_app.callback()
@@ -2231,6 +2255,7 @@ def _render_enrichment_preview(
         ai.add_row("Prompt name", generated.prompt_name)
         ai.add_row("Token usage", _format_token_usage(generated.metadata))
         ai.add_row("Generation time", f"{document.generation_time_seconds:.3f}s")
+        _add_prompt_budget_rows(ai, prompt.budget_diagnostics)
     console.print(ai)
 
     warnings = context.pipeline.warnings
@@ -2288,6 +2313,7 @@ def _render_enrichment_preview(
     prompt_table.add_row("Prompt name", prompt.name)
     prompt_table.add_row("Prompt version", prompt.version)
     prompt_table.add_row("Variables used", ", ".join(sorted(prompt.variables)))
+    _add_prompt_budget_rows(prompt_table, prompt.budget_diagnostics)
     console.print(prompt_table)
 
     console.rule("Warnings")
@@ -2348,9 +2374,36 @@ def _display_category(category: str) -> str:
     return category.replace("_", " ").title()
 
 
-def _render_artist_preview(document: ArtistPreviewDocument) -> None:
+def _add_prompt_budget_rows(table: Table, diagnostics: dict[str, object] | None) -> None:
+    """Add prompt budget diagnostics to a Rich table."""
+    if not diagnostics:
+        return
+    table.add_row("Prompt budget", str(diagnostics.get("max_characters", "")))
+    table.add_row("Current size", str(diagnostics.get("original_size", "")))
+    table.add_row("Trimmed size", str(diagnostics.get("final_size", "")))
+    contributions = diagnostics.get("per_source_contribution")
+    if isinstance(contributions, list):
+        summary = []
+        for item in contributions:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            original = item.get("original_size")
+            final = item.get("final_size")
+            if name is not None:
+                summary.append(f"{name}: {original}->{final}")
+        if summary:
+            table.add_row("Per-source contribution", "; ".join(summary))
+
+
+def _render_artist_preview(
+    document: ArtistPreviewDocument,
+    *,
+    verbose: bool = False,
+) -> None:
     """Render an end-to-end generated artist preview."""
     context = document.context
+    prompt = document.rendered_prompt
     generated = document.generated_summary
 
     console.rule("GENERATED BIOGRAPHY")
@@ -2363,15 +2416,32 @@ def _render_artist_preview(document: ArtistPreviewDocument) -> None:
     ai.add_row("Provider", generated.provider)
     ai.add_row("Model", generated.model)
     ai.add_row("Prompt version", generated.prompt_version)
+    if verbose:
+        ai.add_row("Prompt name", generated.prompt_name)
+        ai.add_row("Prompt variables", ", ".join(sorted(prompt.variables)))
+        ai.add_row("Token usage", _format_token_usage(generated.metadata))
+        ai.add_row("Generation time", f"{document.generation_time_seconds:.3f}s")
+        _add_prompt_budget_rows(ai, prompt.budget_diagnostics)
     console.print(ai)
+
+    warnings = context.pipeline.warnings
+    if warnings:
+        console.rule("Warnings")
+        for warning in warnings:
+            console.print(f"[yellow]{warning}[/yellow]")
+
+    if not verbose:
+        return
 
     console.rule("PLEX")
     plex = Table(show_header=False)
     plex.add_column("Field", style="bold")
     plex.add_column("Value")
     plex.add_row("Artist", context.plex.artist)
-    plex.add_row("Current summary", context.plex.summary or "")
+    plex.add_row("Current biography", context.plex.summary or "")
     plex.add_row("Genres", ", ".join(context.plex.genres))
+    plex.add_row("Styles", ", ".join(context.styles))
+    plex.add_row("Career years", document.career_years)
     console.print(plex)
 
     console.rule("MUSICBRAINZ")
@@ -2380,6 +2450,7 @@ def _render_artist_preview(document: ArtistPreviewDocument) -> None:
     musicbrainz.add_column("Value")
     musicbrainz.add_row("Artist MBID", context.musicbrainz.artist_mbid or "")
     musicbrainz.add_row("Confidence", str(context.musicbrainz.confidence))
+    musicbrainz.add_row("Aliases", ", ".join(context.musicbrainz.aliases or context.aliases))
     musicbrainz.add_row("Genres", ", ".join(context.musicbrainz.genres))
     console.print(musicbrainz)
 
@@ -2390,17 +2461,131 @@ def _render_artist_preview(document: ArtistPreviewDocument) -> None:
     wikipedia.add_row("Article status", "available" if context.wikipedia.extract else "missing")
     wikipedia.add_row("Language", context.wikipedia.language or "")
     wikipedia.add_row("Title", context.wikipedia.title or "")
+    wikipedia.add_row("Extract", context.wikipedia.extract or "")
+    wikipedia.add_row("URL", context.wikipedia.page_url or "")
     console.print(wikipedia)
+
+    console.rule("DISCOGS")
+    discogs = Table(show_header=False)
+    discogs.add_column("Field", style="bold")
+    discogs.add_column("Value")
+    discogs_context = document.resolved_prompt_variables.get("discogs_context")
+    if isinstance(discogs_context, dict) and discogs_context:
+        discogs.add_row("Status", "available")
+        for key, value in discogs_context.items():
+            discogs.add_row(_display_category(key), _display_prompt_value(value))
+    else:
+        discogs.add_row("Status", "No additional artist information available.")
+    console.print(discogs)
+
+    console.rule("LAST.FM")
+    lastfm = Table(show_header=False)
+    lastfm.add_column("Field", style="bold")
+    lastfm.add_column("Value")
+    lastfm.add_row("Biography status", "available" if context.lastfm.biography else "missing")
+    lastfm.add_row("Listeners", str(context.lastfm.listeners or ""))
+    lastfm.add_row("Playcount", str(context.lastfm.playcount or ""))
+    lastfm.add_row("Tags", ", ".join(context.lastfm.tags))
+    console.print(lastfm)
 
     _render_fact_verification(
         context.fact_collection,
         categories=SUPPORTED_ARTIST_CATEGORIES,
     )
-    _render_style_analysis(
-        generated.text,
-        artist=context.plex.artist,
+
+    _render_quality_report(document.qa_report)
+
+    console.rule("PROMPT")
+    prompt_table = Table(show_header=False)
+    prompt_table.add_column("Field", style="bold")
+    prompt_table.add_column("Value")
+    prompt_table.add_row("Prompt name", prompt.name)
+    prompt_table.add_row("Prompt version", prompt.version)
+    prompt_table.add_row("Variables used", ", ".join(sorted(prompt.variables)))
+    _add_prompt_budget_rows(prompt_table, prompt.budget_diagnostics)
+    for key, value in document.resolved_prompt_variables.items():
+        prompt_table.add_row(_display_category(key), _display_prompt_value(value))
+    console.print(prompt_table)
+
+    console.rule("KNOWLEDGE BUILDER")
+    knowledge = Table(show_header=False)
+    knowledge.add_column("Field", style="bold")
+    knowledge.add_column("Value")
+    for key, value in document.knowledge_summary.items():
+        knowledge.add_row(_display_category(key), _display_prompt_value(value))
+    console.print(knowledge)
+
+    console.rule("CONTEXT BUILDER")
+    context_table = Table(show_header=False)
+    context_table.add_column("Field", style="bold")
+    context_table.add_column("Value")
+    for source, status in document.source_availability.items():
+        context_table.add_row(f"{source.title()} source", status)
+    for key, value in document.context_summary.items():
+        context_table.add_row(_display_category(key), _display_prompt_value(value))
+    console.print(context_table)
+
+    _render_artist_style_analysis(document)
+
+    console.rule("Warnings")
+    if warnings:
+        for warning in warnings:
+            console.print(f"[yellow]{warning}[/yellow]")
+    else:
+        console.print("[green]None[/green]")
+
+
+def _render_quality_report(report: object | None) -> None:
+    """Render editorial QA report when available."""
+    console.rule("EDITORIAL QUALITY")
+    if report is None:
+        console.print("[yellow]No editorial quality report available.[/yellow]")
+        return
+    quality = Table(show_header=False)
+    quality.add_column("Field", style="bold")
+    quality.add_column("Value")
+    quality.add_row("Overall score", str(report.overall_score))
+    quality.add_row("Quality level", str(report.quality_level or report.overall_level or ""))
+    quality.add_row("Missing topics", ", ".join(report.missing_topics))
+    if report.recommendations:
+        quality.add_row("Recommendations", "; ".join(str(item) for item in report.recommendations))
+    console.print(quality)
+
+
+def _display_prompt_value(value: object) -> str:
+    """Return a readable value for verbose prompt/context diagnostics."""
+    if isinstance(value, dict):
+        return "; ".join(
+            f"{_display_category(str(key))}: {_display_prompt_value(item)}"
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return ", ".join(_display_prompt_value(item) for item in value)
+    if isinstance(value, bool):
+        return _yes_no(value)
+    return str(value)
+
+
+def _render_artist_style_analysis(document: ArtistPreviewDocument) -> None:
+    """Render artist style diagnostics from preview data."""
+    diagnostics = document.style_diagnostics or GermanEditorialStyleEngine().analyze(
+        document.generated_summary.text,
+        artist=document.context.plex.artist,
         album=None,
     )
+    table = Table(title="STYLE ANALYSIS", show_header=False)
+    table.add_column("Metric", style="bold")
+    table.add_column("Result")
+    table.add_row("Sentence variation", diagnostics.sentence_variation)
+    table.add_row("Vocabulary diversity", diagnostics.vocabulary_diversity)
+    table.add_row("Repetition", diagnostics.repetition)
+    table.add_row("Readability", diagnostics.readability)
+    table.add_row("LLM clichés", diagnostics.llm_cliches)
+    table.add_row("Passive voice", diagnostics.passive_voice)
+    table.add_row("Overall style", diagnostics.overall_style)
+    if diagnostics.issues:
+        table.add_row("Issues", ", ".join(diagnostics.issues))
+    console.print(table)
 
 
 def _render_style_analysis(text: str, *, artist: str | None, album: str | None) -> None:
@@ -2507,10 +2692,15 @@ def _open_multiline_editor(initial_text: str) -> str | None:
     return edited.strip()
 
 
-def _run_review_loop(service: ReviewService, document: ReviewDocument) -> None:
+def _run_review_loop(
+    service: ReviewService,
+    document: ReviewDocument,
+    debug_context: ReviewDebugContext,
+) -> None:
     """Run the shared interactive review loop."""
     renderer = ReviewRenderer(console)
-    renderer.render(document)
+    debug_logger = ReviewDebugLogger()
+    _render_review_document(renderer, debug_logger, debug_context, document)
 
     while True:
         choice = _review_choice()
@@ -2542,7 +2732,7 @@ def _run_review_loop(service: ReviewService, document: ReviewDocument) -> None:
                 continue
 
             document = service.update_summary(document, edited_text)
-            renderer.render(document)
+            _render_review_document(renderer, debug_logger, debug_context, document)
             continue
 
         if choice == "S":
@@ -2554,6 +2744,17 @@ def _run_review_loop(service: ReviewService, document: ReviewDocument) -> None:
             return
 
         console.print("[red]Choose A, E, S, or Q.[/red]")
+
+
+def _render_review_document(
+    renderer: ReviewRenderer,
+    debug_logger: ReviewDebugLogger,
+    debug_context: ReviewDebugContext,
+    document: ReviewDocument,
+) -> None:
+    """Render a review document and refresh the temporary debug log."""
+    debug_logger.write(document, debug_context)
+    renderer.render(document)
 
 
 def _yes_no(value: bool) -> str:
@@ -2754,6 +2955,13 @@ def _preview_export_path(artist: str, album: str) -> Path:
     """Return the export path for saved preview output."""
     filename = f"{_safe_export_segment(artist)}-{_safe_export_segment(album)}.json"
     return Path("exports") / "previews" / filename
+
+
+def _artist_preview_export_path(artist: str) -> Path:
+    """Return the export path for saved artist preview output."""
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"Artist-Preview-{_safe_export_segment(artist)}-{timestamp}.json"
+    return Path("exports") / "previews" / "artists" / filename
 
 
 def _album_preview_prompt_name(*, translate: bool, improve: bool) -> str:

@@ -134,6 +134,14 @@ class GermanEditorialStyleEngine:
             overly_long=overly_long,
             unnatural_transitions=unnatural_transitions,
         )
+        issues.extend(
+            _artist_biography_issues(
+                normalized,
+                sentences=sentences,
+                artist=artist,
+                album=album,
+            )
+        )
 
         return GermanStyleDiagnostics(
             sentence_variation=_style_rating(sentence_variation_score),
@@ -458,6 +466,76 @@ def _issues(
     if unnatural_transitions:
         issues.append("UNNATURAL_TRANSITIONS")
     return issues
+
+
+def _artist_biography_issues(
+    text: str,
+    *,
+    sentences: list[str],
+    artist: str | None,
+    album: str | None,
+) -> list[str]:
+    """Return diagnostics specific to artist biographies."""
+    if album is not None:
+        return []
+
+    issues: list[str] = []
+    lowered = text.casefold()
+    if _has_generic_artist_opening(sentences, artist):
+        issues.append("WEAK_ARTIST_OPENING")
+    if _has_generic_biography_language(lowered):
+        issues.append("GENERIC_BIOGRAPHY")
+    if _has_chronological_jumps(sentences):
+        issues.append("CHRONOLOGICAL_JUMPS")
+    if _overuses_simple_artist_verbs(lowered):
+        issues.append("SIMPLE_VERB_OVERUSE")
+    return issues
+
+
+def _has_generic_artist_opening(sentences: list[str], artist: str | None) -> bool:
+    """Return whether an artist biography starts like a dictionary entry."""
+    if not sentences:
+        return True
+    first = sentences[0].casefold()
+    name = artist.casefold() if artist else ""
+    generic_prefixes = (
+        f"{name} ist " if name else "",
+        f"{name} war " if name else "",
+        "der künstler ist ",
+        "die künstlerin ist ",
+        "die band ist ",
+        "der sänger ist ",
+        "die sängerin ist ",
+    )
+    return any(prefix and first.startswith(prefix) for prefix in generic_prefixes)
+
+
+def _has_generic_biography_language(lowered: str) -> bool:
+    """Return whether prose relies on generic biography wording."""
+    phrases = (
+        "ist bekannt für",
+        "wurde bekannt durch",
+        "gehört zu den bekanntesten",
+        "zählt zu den bedeutendsten",
+    )
+    return any(phrase in lowered for phrase in phrases)
+
+
+def _has_chronological_jumps(sentences: list[str]) -> bool:
+    """Return whether year mentions move backwards without a transition."""
+    years: list[int] = []
+    for sentence in sentences:
+        years.extend(int(year) for year in findall(r"\b(?:19|20)\d{2}\b", sentence))
+    if len(years) < 3:
+        return False
+    return any(current < previous for previous, current in zip(years, years[1:], strict=False))
+
+
+def _overuses_simple_artist_verbs(lowered: str) -> bool:
+    """Return whether a biography leans too heavily on simple linking verbs."""
+    simple_verbs = sum(lowered.count(f" {verb} ") for verb in ("ist", "war", "wurde"))
+    sentence_count = max(1, len(_sentences(lowered)))
+    return simple_verbs >= 5 and simple_verbs / sentence_count > 1.2
 
 
 def _remove_duplicate_sentence_starts(text: str) -> str:

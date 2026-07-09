@@ -9,6 +9,8 @@ Preview a generated biography without modifying Plex:
 
 ```bash
 plex-enhancer preview artist --artist "Nina Simone"
+plex-enhancer preview artist --artist "Nina Simone" --verbose
+plex-enhancer preview artist --artist "Nina Simone" --save
 ```
 
 Review the generated biography interactively:
@@ -29,6 +31,11 @@ Each command supports the same provider overrides as albums:
 plex-enhancer preview artist --artist "Nina Simone" --provider openai --model gpt-5.5
 ```
 
+`preview artist --verbose` shows Plex biography context, MusicBrainz identity data, Wikipedia,
+Discogs, Last.fm, fact verification, editorial quality, style analysis, prompt variables, token
+usage, generation time, and context-builder diagnostics. `--save` writes the full preview document
+to `exports/previews/artists/Artist-Preview-<artist>-YYYYMMDD-HHMMSS.json`.
+
 ## Workflow
 
 The artist workflow:
@@ -39,7 +46,7 @@ The artist workflow:
 4. Builds an `ArtistContext`.
 5. Renders the artist summary prompt.
 6. Generates a German biography through `AIManager`.
-7. Runs the same quality validation used for album summaries.
+7. Runs artist-specific quality validation for concise 120-180 word German biographies.
 8. Writes through the apply workflow only when `apply artist` is used.
 
 ## Safety

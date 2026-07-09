@@ -59,14 +59,23 @@ PLEX_ENHANCER_LASTFM__API_KEY
 ```text
 PLEX_ENHANCER_AI__PROVIDER=openai
 PLEX_ENHANCER_AI__MODEL=gpt-5.5
+PLEX_ENHANCER_AI__MAX_PROMPT_CHARACTERS=20000
 OPENAI_API_KEY=...
 ```
+
+`PLEX_ENHANCER_AI__MAX_PROMPT_CHARACTERS` ist die bevorzugte Einstellung. Die Kurzform
+`AI_PROMPT_MAX_CHARS` wird weiterhin aus Umgebungsvariablen und explizit geladenen `.env` Dateien
+akzeptiert.
 
 Pro Befehl kann das Modell überschrieben werden:
 
 ```bash
 plex-enhancer preview --artist "Jennifer Rush" --album "Credo" --model "gpt-5.5"
 ```
+
+Sehr große Künstlerkontexte werden automatisch auf das konfigurierte Prompt-Budget gekürzt.
+Strukturierte verifizierte Metadaten bleiben erhalten; lange Wikipedia-, Discogs-, Last.fm- und
+Plex-Texte werden bei Bedarf an Absatz- oder Satzgrenzen gekürzt.
 
 ## 4.6 Prompt-Versionen
 
@@ -154,4 +163,3 @@ Geheime Werte:
 - Cache nicht unnötig löschen.
 - Bei großen Bibliotheken zuerst `benchmark` ausführen.
 - Vor Apply immer Review-Ausgabe prüfen.
-

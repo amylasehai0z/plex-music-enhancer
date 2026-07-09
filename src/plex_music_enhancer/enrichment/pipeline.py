@@ -1146,10 +1146,8 @@ def _rich_artist_fields(
     genres = _merged_list(musicbrainz.genres, plex.genres, discogs.genres, lastfm.tags)
     styles = _merged_list(discogs.styles, _list_from_attrs(plex_artist, "styles"))
     members = _merged_list(discogs.members, _list_from_attrs(plex_artist, "members"))
-    active_years = (
-        _string_from_attrs(plex_artist, "active_years", "yearsActive")
-        or discogs.active_years
-        or _date_range(musicbrainz.begin_date, musicbrainz.end_date)
+    active_years = _string_from_attrs(plex_artist, "active_years", "yearsActive") or (
+        discogs.active_years
     )
     biography = wikipedia.extract or lastfm.biography or discogs.profile or plex.summary
     return {

@@ -284,7 +284,12 @@ def _artist_candidates(context: ArtistContext) -> list[_CandidateFact]:
     _add(candidates, "nationality", context.musicbrainz.country, "musicbrainz")
     _add(candidates, "nationality", context.nationality, "plex")
     _add(candidates, "active_years", context.discogs.active_years, "discogs")
-    _add(candidates, "active_years", context.active_years, "plex")
+    _add(
+        candidates,
+        "active_years",
+        _career_years_value(context.active_years, birth_date=context.birth_date),
+        "plex",
+    )
     _add_list(candidates, "genres", context.musicbrainz.genres, "musicbrainz")
     _add_list(candidates, "genres", context.plex.genres, "plex")
     _add_list(candidates, "genres", context.discogs.genres, "discogs")
@@ -364,6 +369,18 @@ def _add(
     text = _string(value)
     if text:
         candidates.append(_CandidateFact(category=category, value=text, source=source))
+
+
+def _career_years_value(value: str | None, *, birth_date: str | None) -> str | None:
+    """Return career years only when they are not accidentally a birth date."""
+    text = _string(value)
+    if text is None:
+        return None
+    if birth_date and _normalize(text) == _normalize(birth_date):
+        return None
+    if "-" in text or "–" in text or "present" in text.casefold():
+        return text
+    return text if len(text) == 4 and text.isdigit() else None
 
 
 def _add_list(
