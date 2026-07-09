@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from json import dumps
+from os import environ
 from pathlib import Path
 from re import sub
 from typing import Annotated
@@ -27,8 +28,10 @@ from plex_music_enhancer.batch import (
     BatchReviewStep,
     PlexBatchAlbumSource,
 )
-from plex_music_enhancer.config import Settings
+from plex_music_enhancer.cache import CacheEntryInfo, CacheStats, KnowledgeCacheStore
+from plex_music_enhancer.config import AISettings, Settings
 from plex_music_enhancer.constants import CLI_NAME, MINIMUM_PYTHON_VERSION, __version__
+from plex_music_enhancer.editorial import GermanEditorialStyleEngine
 from plex_music_enhancer.enrichment import (
     AlbumContext,
     EnrichmentPipeline,
@@ -42,6 +45,7 @@ from plex_music_enhancer.library import (
     LibraryWorkflowService,
 )
 from plex_music_enhancer.logging import configure_logging
+from plex_music_enhancer.performance import BenchmarkReport, BenchmarkService
 from plex_music_enhancer.planner import EnrichmentPlanner, PlanningReport
 from plex_music_enhancer.plex import (
     AlbumScanItem,
@@ -64,6 +68,7 @@ from plex_music_enhancer.plex import (
     PlexScannerError,
     PlexWriteProbe,
 )
+from plex_music_enhancer.prompts import PromptRegistry
 from plex_music_enhancer.review import ReviewDocument, ReviewError, ReviewRenderer, ReviewService
 from plex_music_enhancer.services import (
     AlbumMetadataDocument,
@@ -74,6 +79,12 @@ from plex_music_enhancer.services import (
     MetadataEnrichmentPipeline,
     MusicBrainzMatcher,
     PreviewError,
+)
+from plex_music_enhancer.utils.files import write_text_atomic
+from plex_music_enhancer.verification import FactCollection
+from plex_music_enhancer.verification.verifier import (
+    SUPPORTED_ARTIST_CATEGORIES,
+    SUPPORTED_CATEGORIES,
 )
 
 PLEX_CONFIGURATION_HELP = (
@@ -197,6 +208,16 @@ library_app = typer.Typer(
     ),
 )
 app.add_typer(library_app, name="library")
+cache_app = typer.Typer(
+    help="Inspect and manage the local provider knowledge cache.",
+    epilog=(
+        "Examples:\n"
+        "  plex-enhancer cache stats\n"
+        "  plex-enhancer cache list\n"
+        "  plex-enhancer cache clear"
+    ),
+)
+app.add_typer(cache_app, name="cache")
 console = Console()
 
 
@@ -286,6 +307,41 @@ def plan(
         console.print_json(report.model_dump_json(indent=2, by_alias=True))
     else:
         _render_planning_report(report)
+
+
+@app.command()
+def benchmark(
+    library: Annotated[
+        str | None,
+        typer.Option("--library", help="Plex music library title to benchmark."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete benchmark report as JSON."),
+    ] = False,
+) -> None:
+    """Run read-only performance diagnostics for a Plex music library."""
+    plex_url, plex_token = _require_plex_configuration()
+    service = BenchmarkService(
+        album_source=PlexBatchAlbumSource(plex_url, plex_token),
+        cache_store=KnowledgeCacheStore(),
+    )
+
+    try:
+        if json_output:
+            report = service.run(library=library)
+        else:
+            with console.status("Benchmarking Plex library performance..."):
+                report = service.run(library=library)
+    except BatchReviewError as exc:
+        message = _redact_secret(str(exc), plex_token.get_secret_value())
+        console.print(f"[red]Unable to benchmark library:[/red] {message}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        console.print_json(report.model_dump_json(indent=2, by_alias=True))
+    else:
+        _render_benchmark_report(report)
 
 
 @app.command()
@@ -499,7 +555,7 @@ def review(
         typer.Option("--improve", help="Review an improved German version of the current summary."),
     ] = False,
 ) -> None:
-    """Interactively review generated metadata without modifying Plex."""
+    """Interactively review generated metadata and optionally apply it safely."""
     if ctx.invoked_subcommand is not None:
         return
     if artist is None or album is None:
@@ -546,7 +602,7 @@ def review_artist(
         typer.Option("--json", help="Print the complete review document as JSON."),
     ] = False,
 ) -> None:
-    """Interactively review generated artist metadata without modifying Plex."""
+    """Interactively review generated artist metadata and optionally apply it safely."""
     service, token = _create_review_service(provider_name=provider, model=model)
 
     try:
@@ -588,6 +644,10 @@ def apply(
         bool,
         typer.Option("--improve", help="Apply an improved German version of the current summary."),
     ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Override the configured minimum QA score."),
+    ] = False,
 ) -> None:
     """Apply a generated album summary to Plex with backup, verification, and audit."""
     if ctx.invoked_subcommand is not None:
@@ -599,7 +659,7 @@ def apply(
         console.print("[red]Choose either --translate or --improve, not both.[/red]")
         raise typer.Exit(code=1)
 
-    service, token = _create_apply_service(provider_name=provider, model=model)
+    service, token = _create_apply_service(provider_name=provider, model=model, force=force)
     prompt_name = _album_preview_prompt_name(translate=translate, improve=improve)
 
     try:
@@ -637,9 +697,13 @@ def apply_artist(
         bool,
         typer.Option("--json", help="Print the complete apply result as JSON."),
     ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Override the configured minimum QA score."),
+    ] = False,
 ) -> None:
     """Apply a generated artist biography to Plex with backup, verification, and audit."""
-    service, token = _create_apply_service(provider_name=provider, model=model)
+    service, token = _create_apply_service(provider_name=provider, model=model, force=force)
 
     try:
         result = service.apply_artist_summary(artist=artist)
@@ -887,6 +951,27 @@ def library_report(
         console.print_json(report.model_dump_json(indent=2, by_alias=True))
     else:
         _render_library_review_report(report)
+
+
+@cache_app.command(name="stats")
+def cache_stats() -> None:
+    """Show local knowledge cache statistics."""
+    stats = KnowledgeCacheStore().stats()
+    _render_cache_stats(stats)
+
+
+@cache_app.command(name="list")
+def cache_list() -> None:
+    """List local knowledge cache entries."""
+    entries = KnowledgeCacheStore().list_entries()
+    _render_cache_entries(entries)
+
+
+@cache_app.command(name="clear")
+def cache_clear() -> None:
+    """Clear all local knowledge cache entries."""
+    removed = KnowledgeCacheStore().clear()
+    console.print(f"[green]Removed {removed} cache entr{'y' if removed == 1 else 'ies'}.[/green]")
 
 
 def _run_library_review(
@@ -1342,18 +1427,38 @@ def _create_apply_service(
     *,
     provider_name: str | None = None,
     model: str | None = None,
+    force: bool = False,
 ) -> tuple[ApplyService, SecretStr]:
     """Create a configured apply service or exit with an error."""
     plex_url, plex_token = _require_plex_configuration()
 
     review_service, token = _create_review_service(provider_name=provider_name, model=model)
+    settings = Settings()
     return (
         ApplyService(
             review_service=review_service,
             base_url=plex_url,
             token=plex_token,
+            minimum_quality_score=settings.quality.minimum_quality_score,
+            force_quality=force,
         ),
         token,
+    )
+
+
+def _create_apply_service_from_review(
+    review_service: ReviewService,
+) -> tuple[ApplyService, SecretStr]:
+    """Create a safe apply service for an already-created review workflow."""
+    settings, plex_url, plex_token = _require_settings_with_plex_configuration()
+    return (
+        ApplyService(
+            review_service=review_service,
+            base_url=plex_url,
+            token=plex_token,
+            minimum_quality_score=settings.quality.minimum_quality_score,
+        ),
+        plex_token,
     )
 
 
@@ -1370,6 +1475,7 @@ def _create_batch_review_service(
         review_service=review_service,
         base_url=plex_url,
         token=plex_token,
+        minimum_quality_score=Settings().quality.minimum_quality_score,
     )
     batch_service = BatchReviewService(
         album_source=PlexBatchAlbumSource(plex_url, plex_token),
@@ -1392,6 +1498,7 @@ def _create_library_workflow_service(
         review_service=review_service,
         base_url=plex_url,
         token=plex_token,
+        minimum_quality_score=Settings().quality.minimum_quality_score,
     )
     workflow_service = LibraryWorkflowService(
         album_source=PlexBatchAlbumSource(plex_url, plex_token),
@@ -1507,6 +1614,7 @@ def _run_diagnostics() -> list[DiagnosticCheck]:
             str(settings.plex_url) if settings.plex_url is not None else "Missing Plex URL.",
         )
     )
+    checks.extend(_run_ai_diagnostics(settings))
 
     if not settings.has_plex_configuration:
         checks.append(
@@ -1543,6 +1651,84 @@ def _run_diagnostics() -> list[DiagnosticCheck]:
 
     checks.append(DiagnosticCheck("Plex connection", result.ok, detail))
     return checks
+
+
+def _run_ai_diagnostics(settings: Settings) -> list[DiagnosticCheck]:
+    """Return AI provider diagnostics for doctor."""
+    checks: list[DiagnosticCheck] = []
+    ai_settings = settings.ai
+    configured_api_key = _ai_api_key_configured(ai_settings.api_key)
+
+    checks.append(DiagnosticCheck("AI configured provider", True, ai_settings.provider))
+    checks.append(DiagnosticCheck("AI configured model", True, ai_settings.model))
+    checks.append(
+        DiagnosticCheck(
+            "AI API key configured",
+            True,
+            _yes_no(configured_api_key),
+        )
+    )
+    checks.append(_ai_provider_availability(ai_settings))
+    checks.append(DiagnosticCheck("AI cache status", True, _cache_status_detail()))
+    checks.append(DiagnosticCheck("AI default prompt version", True, _default_prompt_version()))
+
+    if ai_settings.provider.strip().casefold() == "dummy" and configured_api_key:
+        checks.append(
+            DiagnosticCheck(
+                "AI provider warning",
+                True,
+                (
+                    "An OpenAI API key is configured, but ai.provider is dummy. "
+                    "Preview/review will use DummyProvider until you set "
+                    "PLEX_ENHANCER_AI__PROVIDER=openai or pass --provider openai."
+                ),
+            )
+        )
+
+    return checks
+
+
+def _ai_api_key_configured(api_key: SecretStr | None) -> bool:
+    """Return whether any AI API key source is configured."""
+    configured_value = api_key.get_secret_value().strip() if api_key is not None else ""
+    return bool(configured_value or environ.get("OPENAI_API_KEY", "").strip())
+
+
+def _ai_provider_availability(ai_settings: AISettings) -> DiagnosticCheck:
+    """Return availability diagnostics for the configured AI provider."""
+    try:
+        metadata = AIManager(settings=ai_settings).provider_metadata()
+    except AIError as exc:
+        return DiagnosticCheck("AI provider availability", False, str(exc))
+
+    detail = (
+        f"{metadata.provider} available. "
+        f"Album summaries: {_yes_no(metadata.capabilities.album_summary)}. "
+        f"Artist summaries: {_yes_no(metadata.capabilities.artist_summary)}. "
+        f"Network required: {_yes_no(metadata.capabilities.network_required)}."
+    )
+    return DiagnosticCheck("AI provider availability", True, detail)
+
+
+def _cache_status_detail() -> str:
+    """Return a compact knowledge cache status."""
+    try:
+        stats = KnowledgeCacheStore().stats()
+    except Exception as exc:
+        return f"Unavailable: {exc}"
+
+    return (
+        f"{stats.total_entries} entries "
+        f"({stats.fresh_entries} fresh, {stats.expired_entries} expired) at {stats.root}"
+    )
+
+
+def _default_prompt_version() -> str:
+    """Return the default album prompt version."""
+    try:
+        return PromptRegistry().get("album_summary").version
+    except Exception as exc:
+        return f"Unavailable: {exc}"
 
 
 def _render_diagnostics(checks: list[DiagnosticCheck]) -> None:
@@ -1847,6 +2033,14 @@ def _render_batch_review_report(report: BatchReviewReport) -> None:
     table.add_row("Skipped", str(report.skipped))
     table.add_row("Failed", str(report.failed))
     table.add_row("Quit", "yes" if report.quit_requested else "no")
+    if report.average_quality_score is not None:
+        table.add_row("Average QA score", f"{report.average_quality_score:.2f}")
+    if report.lowest_quality_score is not None:
+        table.add_row("Lowest QA score", str(report.lowest_quality_score))
+    if report.highest_quality_score is not None:
+        table.add_row("Highest QA score", str(report.highest_quality_score))
+    table.add_row("Albums below threshold", str(report.albums_below_threshold))
+    table.add_row("Albums requiring review", str(report.albums_requiring_review))
     table.add_row("Progress", report.job_path or "")
     console.print(table)
 
@@ -2066,6 +2260,8 @@ def _render_enrichment_preview(
     wikipedia.add_row("Page URL", context.wikipedia.page_url or "")
     console.print(wikipedia)
 
+    _render_fact_verification(context.fact_collection)
+
     console.rule("PROMPT")
     prompt_table = Table(show_header=False)
     prompt_table.add_column("Field", style="bold")
@@ -2081,6 +2277,56 @@ def _render_enrichment_preview(
             console.print(f"[yellow]{warning}[/yellow]")
     else:
         console.print("[green]None[/green]")
+
+
+def _render_fact_verification(
+    collection: FactCollection,
+    *,
+    categories: tuple[str, ...] = SUPPORTED_CATEGORIES,
+) -> None:
+    """Render deterministic fact confidence diagnostics."""
+    console.rule("FACT VERIFICATION")
+    table = Table(show_header=True)
+    table.add_column("Fact", style="bold")
+    table.add_column("Status")
+    table.add_column("Confidence", justify="right")
+    table.add_column("Sources")
+    table.add_column("Value")
+
+    for category in categories:
+        facts = collection.by_category(category)
+        if not facts:
+            table.add_row(_display_category(category), "UNKNOWN", "0.00", "", "")
+            continue
+        fact = sorted(
+            facts,
+            key=lambda item: (
+                item.verification_state.value == "unknown",
+                -item.confidence_score,
+                item.value,
+            ),
+        )[0]
+        table.add_row(
+            _display_category(category),
+            fact.verification_state.value.upper(),
+            f"{fact.confidence_score:.2f}",
+            ", ".join(fact.supporting_sources),
+            fact.value,
+        )
+
+    if collection.conflicts:
+        conflict_summary = "; ".join(
+            f"{fact.category}: {fact.value}" for fact in collection.conflicts
+        )
+    else:
+        conflict_summary = "none"
+    table.add_row("Conflicts", "", "", "", conflict_summary)
+    console.print(table)
+
+
+def _display_category(category: str) -> str:
+    """Return a readable fact category label."""
+    return category.replace("_", " ").title()
 
 
 def _render_artist_preview(document: ArtistPreviewDocument) -> None:
@@ -2127,6 +2373,96 @@ def _render_artist_preview(document: ArtistPreviewDocument) -> None:
     wikipedia.add_row("Title", context.wikipedia.title or "")
     console.print(wikipedia)
 
+    _render_fact_verification(
+        context.fact_collection,
+        categories=SUPPORTED_ARTIST_CATEGORIES,
+    )
+    _render_style_analysis(
+        generated.text,
+        artist=context.plex.artist,
+        album=None,
+    )
+
+
+def _render_style_analysis(text: str, *, artist: str | None, album: str | None) -> None:
+    """Render generated German style diagnostics."""
+    diagnostics = GermanEditorialStyleEngine().analyze(text, artist=artist, album=album)
+    table = Table(title="STYLE ANALYSIS", show_header=False)
+    table.add_column("Metric", style="bold")
+    table.add_column("Result")
+    table.add_row("Sentence variation", diagnostics.sentence_variation)
+    table.add_row("Vocabulary diversity", diagnostics.vocabulary_diversity)
+    table.add_row("Repetition", diagnostics.repetition)
+    table.add_row("Readability", diagnostics.readability)
+    table.add_row("LLM clichés", diagnostics.llm_cliches)
+    table.add_row("Passive voice", diagnostics.passive_voice)
+    table.add_row("Overall style", diagnostics.overall_style)
+    if diagnostics.issues:
+        table.add_row("Issues", ", ".join(diagnostics.issues))
+    console.print(table)
+
+
+def _render_cache_stats(stats: CacheStats) -> None:
+    """Render local knowledge cache statistics."""
+    table = Table(title="Knowledge Cache")
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+    table.add_row("Location", str(stats.root))
+    table.add_row("Total entries", str(stats.total_entries))
+    table.add_row("Fresh entries", str(stats.fresh_entries))
+    table.add_row("Expired entries", str(stats.expired_entries))
+    for kind, count in stats.by_kind.items():
+        table.add_row(f"{kind.value.title()} entries", str(count))
+    for source, count in sorted(stats.by_source.items()):
+        table.add_row(f"{source} entries", str(count))
+    console.print(table)
+
+
+def _render_cache_entries(entries: list[CacheEntryInfo]) -> None:
+    """Render local knowledge cache entries."""
+    if not entries:
+        console.print("[yellow]No cache entries found.[/yellow]")
+        return
+
+    table = Table(title="Knowledge Cache Entries")
+    table.add_column("Kind")
+    table.add_column("Source")
+    table.add_column("Cached at")
+    table.add_column("Status")
+    table.add_column("Path")
+    for entry in entries:
+        table.add_row(
+            entry.kind.value,
+            entry.source,
+            entry.cached_at.isoformat(),
+            "expired" if entry.expired else "fresh",
+            str(entry.path),
+        )
+    console.print(table)
+
+
+def _render_benchmark_report(report: BenchmarkReport) -> None:
+    """Render benchmark diagnostics."""
+    table = Table(title="Performance Benchmark")
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+    table.add_row("Library", report.library or "All music libraries")
+    table.add_row("Albums scanned", str(report.albums_scanned))
+    table.add_row("Scan duration", f"{report.scan_duration_seconds:.4f}s")
+    table.add_row("Throughput", f"{report.throughput_per_hour:.2f} albums/hour")
+    table.add_row("CPU time", f"{report.cpu_time_seconds:.4f}s")
+    table.add_row("Memory", f"{report.memory_mb:.2f} MiB")
+    table.add_row("Cache entries", str(report.cache_entries))
+    table.add_row("Expired cache entries", str(report.cache_expired_entries))
+    if report.cache_hit_ratio_estimate is not None:
+        table.add_row("Cache freshness", f"{report.cache_hit_ratio_estimate:.2%}")
+    for provider, duration in sorted(report.provider_timings.items()):
+        table.add_row(f"{provider} timing", f"{duration:.4f}s")
+    if report.slowest_operations:
+        table.add_row("Slowest operations", ", ".join(report.slowest_operations))
+    table.add_row("Recommendations", "\n".join(report.recommendations))
+    console.print(table)
+
 
 def _format_token_usage(metadata: dict[str, object]) -> str:
     """Return token usage from generated summary metadata."""
@@ -2164,7 +2500,11 @@ def _run_review_loop(service: ReviewService, document: ReviewDocument) -> None:
                 console.print("[red]Generated summary must pass validation before Apply.[/red]")
                 continue
 
-            console.print("[yellow]Apply workflow not implemented yet.[/yellow]")
+            apply_service, _ = _create_apply_service_from_review(service)
+            result = apply_service.apply_review(document)
+            _render_apply_result(result)
+            if result.status != "SUCCESS":
+                raise typer.Exit(code=1)
             return
 
         if choice == "E":
@@ -2353,11 +2693,7 @@ def _render_albums(album_items: list[AlbumScanItem]) -> None:
 
 def _write_scan_export(export_path: Path, scan_export: BaseModel) -> None:
     """Write scan results to a JSON export file."""
-    export_path.parent.mkdir(parents=True, exist_ok=True)
-    export_path.write_text(
-        scan_export.model_dump_json(indent=2, by_alias=True) + "\n",
-        encoding="utf-8",
-    )
+    write_text_atomic(export_path, scan_export.model_dump_json(indent=2, by_alias=True) + "\n")
 
 
 def _inspection_export_path(
@@ -2465,7 +2801,7 @@ def _write_env_values(env_path: Path, values: dict[str, str]) -> None:
     for key, value in remaining_values.items():
         updated_lines.append(f"{key}={value}")
 
-    env_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+    write_text_atomic(env_path, "\n".join(updated_lines) + "\n")
 
 
 def _parse_env_key(line: str) -> str | None:

@@ -34,14 +34,14 @@ Templates may use:
 - `{{current_summary}}`
 - `{{language}}`
 
-The registry rejects unsupported placeholders. The renderer fails when a template references a
-required placeholder that has not been supplied.
+The registry rejects unsupported template variables. The renderer fails when a template references a
+required variable that has not been supplied.
 
 ## Components
 
 `PromptLoader` reads Markdown templates from disk.
 
-`PromptRegistry` discovers templates, validates placeholders, and caches loaded templates.
+`PromptRegistry` discovers templates, validates variables, and caches loaded templates.
 
 `PromptRenderer` substitutes variables while preserving Markdown formatting.
 

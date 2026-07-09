@@ -5,13 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import httpx
+from pydantic import SecretStr
 
 from plex_music_enhancer.providers import (
     AlbumMetadata,
     ArtistMetadata,
+    DiscogsProvider,
+    LastFMProvider,
     ProviderManager,
     WikipediaProvider,
 )
+from plex_music_enhancer.providers.discogs import normalize_credit_role
+from plex_music_enhancer.providers.lastfm import normalize_biography, normalize_tags
 from plex_music_enhancer.providers.musicbrainz import (
     MusicBrainzAlbumMetadata,
     MusicBrainzAlbumSearchResult,
@@ -156,7 +161,35 @@ def test_musicbrainz_provider_fetches_album_metadata(tmp_path: object) -> None:
                     "primary-type": "Album",
                     "secondary-types": ["Compilation"],
                     "genres": [{"name": "jazz"}],
+                    "tags": [{"name": "soul"}],
                     "artist-credit": [{"name": "Nina Simone"}],
+                    "label-info": [
+                        {"label": {"name": "Philips Records"}, "catalog-number": "PHS 600-187"}
+                    ],
+                    "barcode": "123456789012",
+                    "country": "US",
+                    "relations": [
+                        {"type": "producer", "artist": {"name": "Hal Mooney"}},
+                        {"type": "producer", "artist": {"name": "Hal Mooney"}},
+                        {"type": "executive producer", "artist": {"name": "Executive Example"}},
+                        {"type": "composer", "artist": {"name": "Nina Simone"}},
+                        {"type": "lyricist", "artist": {"name": "Oscar Brown Jr."}},
+                        {"type": "arranger", "artist": {"name": "Horace Ott"}},
+                        {"type": "orchestrator", "artist": {"name": "Orchestrator Example"}},
+                        {"type": "conductor", "artist": {"name": "Conductor Example"}},
+                        {"type": "mixing engineer", "artist": {"name": "Mix Engineer"}},
+                        {"type": "mastering engineer", "artist": {"name": "Master Engineer"}},
+                        {"type": "sound engineer", "artist": {"name": "Sound Engineer"}},
+                        {"type": "recording studio", "place": {"name": "RCA Studio B"}},
+                        {"type": "recording location", "place": {"name": "New York"}},
+                        {"type": "featured artist", "artist": {"name": "Featured Example"}},
+                        {"type": "guest musician", "artist": {"name": "Guest Example"}},
+                        {"type": "orchestra", "artist": {"name": "Studio Orchestra"}},
+                        {"type": "choir", "artist": {"name": "Session Choir"}},
+                        {"type": "publisher", "label": {"name": "Publishing Example"}},
+                        {"type": "certification", "label": {"name": "Gold"}},
+                        {"type": "chart position", "url": {"resource": "Billboard 200 #8"}},
+                    ],
                 },
             )
 
@@ -173,7 +206,34 @@ def test_musicbrainz_provider_fetches_album_metadata(tmp_path: object) -> None:
         artist="Nina Simone",
         year=1965,
         genres=["jazz"],
+        tags=["soul"],
         release_type="Album, Compilation",
+        catalog_number="PHS 600-187",
+        barcode="123456789012",
+        release_country="US",
+        first_release_date="1965-10",
+        producers=["Hal Mooney"],
+        executive_producers=["Executive Example"],
+        composers=["Nina Simone"],
+        lyricists=["Oscar Brown Jr."],
+        arrangers=["Horace Ott"],
+        orchestrators=["Orchestrator Example"],
+        conductors=["Conductor Example"],
+        mixing_engineers=["Mix Engineer"],
+        mastering_engineers=["Master Engineer"],
+        sound_engineers=["Sound Engineer"],
+        labels=["Philips Records"],
+        recording_locations=["New York"],
+        studios=["RCA Studio B"],
+        guest_musicians=["Guest Example"],
+        featured_artists=["Featured Example"],
+        orchestras=["Studio Orchestra"],
+        choir="Session Choir",
+        choirs=["Session Choir"],
+        publisher="Publishing Example",
+        publishers=["Publishing Example"],
+        certifications=["Gold"],
+        chart_positions=["Billboard 200 #8"],
     )
 
 
@@ -437,6 +497,344 @@ def test_provider_manager_merges_metadata_with_source_attribution() -> None:
     assert album.summary == "Album summary"
     assert album.source == ["musicbrainz", "wikipedia"]
     assert album.confidence == 0.98
+
+
+def test_discogs_provider_looks_up_album_and_normalizes_credits(tmp_path: object) -> None:
+    """Discogs album lookups should parse release details into structured credits."""
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/database/search":
+            return httpx.Response(200, json={"results": [{"id": 123}]})
+        if request.url.path == "/releases/123":
+            return httpx.Response(
+                200,
+                json={
+                    "labels": [{"name": "Philips Records", "catno": "PHS 600-187"}],
+                    "country": "US",
+                    "released": "1965-10",
+                    "formats": [{"name": "Vinyl", "descriptions": ["LP", "Album"]}],
+                    "notes": "Discogs release notes.",
+                    "extraartists": [
+                        {"name": "Hal Mooney", "role": "Produced By"},
+                        {"name": "Engineer Example", "role": "Recording Engineer"},
+                        {"name": "Master Example", "role": "Mastered By"},
+                        {"name": "Mix Example", "role": "Mixed By"},
+                        {"name": "Photo Example", "role": "Photography"},
+                        {"name": "Design Example", "role": "Design"},
+                        {"name": "Unknown Example", "role": "Liner Notes"},
+                    ],
+                    "tracklist": [
+                        {
+                            "extraartists": [
+                                {"name": "Guest Example", "role": "Guest Vocals"},
+                                {"name": "Guitar Example", "role": "Guitar"},
+                            ]
+                        }
+                    ],
+                },
+            )
+        raise AssertionError(f"Unexpected request: {request.url}")
+
+    provider = DiscogsProvider(
+        token=SecretStr("discogs-token"),
+        http_client=_client(handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+    )
+
+    album = provider.lookup_album("Nina Simone", "Pastel Blues")
+
+    assert album.label == "Philips Records"
+    assert album.catalog_number == "PHS 600-187"
+    assert album.country == "US"
+    assert album.formats == ["Vinyl, LP, Album"]
+    assert album.producer == ["Hal Mooney"]
+    assert album.engineer == ["Engineer Example"]
+    assert album.mastering == ["Master Example"]
+    assert album.mixed_by == ["Mix Example"]
+    assert album.photography == ["Photo Example"]
+    assert album.design == ["Design Example"]
+    assert album.guest_musicians == ["Guest Example"]
+    assert album.personnel == ["Guitar Example"]
+    assert album.credits == ["Unknown Example (Liner Notes)"]
+    assert album.notes == "Discogs release notes."
+    assert requests[0].headers["user-agent"].startswith("plex-music-enhancer/")
+
+
+def test_discogs_provider_looks_up_artist(tmp_path: object) -> None:
+    """Discogs artist lookups should parse artist profile metadata."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/database/search":
+            return httpx.Response(200, json={"results": [{"id": 456}]})
+        if request.url.path == "/artists/456":
+            return httpx.Response(
+                200,
+                json={
+                    "profile": "American singer and pianist.",
+                    "members": [{"name": "Nina Simone"}],
+                    "aliases": [{"name": "Eunice Kathleen Waymon"}],
+                    "namevariations": ["Nina Simone"],
+                    "genres": ["Jazz"],
+                    "styles": ["Soul-Jazz"],
+                    "active_years": "1954-2003",
+                },
+            )
+        raise AssertionError(f"Unexpected request: {request.url}")
+
+    provider = DiscogsProvider(
+        token=SecretStr("discogs-token"),
+        http_client=_client(handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+    )
+
+    artist = provider.lookup_artist("Nina Simone")
+
+    assert artist.profile == "American singer and pianist."
+    assert artist.aliases == ["Eunice Kathleen Waymon"]
+    assert artist.genres == ["Jazz"]
+    assert artist.styles == ["Soul-Jazz"]
+    assert artist.active_years == "1954-2003"
+
+
+def test_discogs_provider_handles_missing_results_and_api_failures(tmp_path: object) -> None:
+    """Discogs provider should return empty contexts instead of raising user-facing errors."""
+
+    def missing_handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(200, json={"results": []})
+
+    def failure_handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(500, json={"message": "temporary failure"})
+
+    missing = DiscogsProvider(
+        token=SecretStr("discogs-token"),
+        http_client=_client(missing_handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+    )
+    failing = DiscogsProvider(
+        token=SecretStr("discogs-token"),
+        http_client=_client(failure_handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+        retries=0,
+    )
+
+    assert missing.lookup_album("Missing", "Album").model_dump(exclude_defaults=True) == {}
+    assert missing.lookup_artist("Missing").model_dump(exclude_defaults=True) == {}
+    failed_album = failing.lookup_album("Nina Simone", "Pastel Blues")
+    assert failed_album.model_dump(exclude_defaults=True) == {}
+
+
+def test_discogs_provider_retries_rate_limits_and_uses_cache(tmp_path: object) -> None:
+    """Successful Discogs lookups should retry transient responses and be cached."""
+    request_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        if request_count == 1:
+            return httpx.Response(429, json={"message": "slow down"})
+        if request.url.path == "/database/search":
+            return httpx.Response(200, json={"results": [{"id": 123}]})
+        if request.url.path == "/releases/123":
+            return httpx.Response(
+                200,
+                json={"labels": [{"name": "Philips Records", "catno": "PHS 600-187"}]},
+            )
+        raise AssertionError(f"Unexpected request: {request.url}")
+
+    provider = DiscogsProvider(
+        token=SecretStr("discogs-token"),
+        http_client=_client(handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+        retries=1,
+    )
+
+    first = provider.lookup_album("Nina Simone", "Pastel Blues")
+    second = provider.lookup_album("Nina Simone", "Pastel Blues")
+
+    assert first == second
+    assert first.label == "Philips Records"
+    assert request_count == 3
+
+
+def test_discogs_credit_role_normalization_is_resilient() -> None:
+    """Discogs role normalization should tolerate common naming differences."""
+    assert normalize_credit_role("Producer") == "producer"
+    assert normalize_credit_role("Produced By") == "producer"
+    assert normalize_credit_role("Recording Engineer") == "engineer"
+    assert normalize_credit_role("Mastered By") == "mastering"
+    assert normalize_credit_role("Mixed By") == "mixed_by"
+    assert normalize_credit_role("Photography") == "photography"
+    assert normalize_credit_role("Artwork") == "artwork"
+    assert normalize_credit_role("Design") == "design"
+    assert normalize_credit_role("Liner Notes") is None
+
+
+def test_lastfm_provider_looks_up_artist(tmp_path: object) -> None:
+    """Last.fm artist lookups should parse biography, tags, and similar artists."""
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.url.params["method"] == "artist.getinfo"
+        return httpx.Response(
+            200,
+            json={
+                "artist": {
+                    "url": "https://www.last.fm/music/Nina+Simone",
+                    "stats": {"listeners": "1000", "playcount": "5000"},
+                    "tags": {
+                        "tag": [
+                            {"name": " jazz "},
+                            {"name": "Soul"},
+                            {"name": "jazz"},
+                            {"name": ""},
+                        ]
+                    },
+                    "similar": {"artist": [{"name": "Billie Holiday"}]},
+                    "bio": {
+                        "summary": "Short <a href='https://last.fm'>bio</a>.",
+                        "content": "First paragraph.<br><br>Second paragraph.",
+                    },
+                }
+            },
+        )
+
+    provider = LastFMProvider(
+        api_key=SecretStr("lastfm-key"),
+        http_client=_client(handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+    )
+
+    artist = provider.lookup_artist("Nina Simone")
+
+    assert artist.short_biography == "Short bio."
+    assert artist.biography == "First paragraph.\n\nSecond paragraph."
+    assert artist.tags == ["jazz", "Soul"]
+    assert artist.similar_artists == ["Billie Holiday"]
+    assert artist.listeners == 1000
+    assert artist.playcount == 5000
+    assert artist.url == "https://www.last.fm/music/Nina+Simone"
+    assert requests[0].headers["user-agent"].startswith("plex-music-enhancer/")
+
+
+def test_lastfm_provider_looks_up_album(tmp_path: object) -> None:
+    """Last.fm album lookups should parse wiki, tags, and community statistics."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["method"] == "album.getinfo"
+        return httpx.Response(
+            200,
+            json={
+                "album": {
+                    "url": "https://www.last.fm/music/Nina+Simone/Pastel+Blues",
+                    "listeners": "900",
+                    "playcount": "3000",
+                    "tags": {"tag": [{"name": "blues"}, {"name": "Vocal Jazz"}]},
+                    "wiki": {
+                        "summary": "Album <b>summary</b>.",
+                        "content": "Album background.<p>Second paragraph.</p>",
+                    },
+                }
+            },
+        )
+
+    provider = LastFMProvider(
+        api_key=SecretStr("lastfm-key"),
+        http_client=_client(handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+    )
+
+    album = provider.lookup_album("Nina Simone", "Pastel Blues")
+
+    assert album.summary == "Album summary."
+    assert album.wiki == "Album background.Second paragraph."
+    assert album.tags == ["blues", "Vocal Jazz"]
+    assert album.listeners == 900
+    assert album.playcount == 3000
+    assert album.url == "https://www.last.fm/music/Nina+Simone/Pastel+Blues"
+
+
+def test_lastfm_provider_handles_missing_data_and_api_failures(tmp_path: object) -> None:
+    """Last.fm provider should return empty contexts for missing and failed lookups."""
+
+    def missing_handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(200, json={"error": 6, "message": "not found"})
+
+    def failure_handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(503, json={"message": "temporary failure"})
+
+    missing = LastFMProvider(
+        api_key=SecretStr("lastfm-key"),
+        http_client=_client(missing_handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+    )
+    failing = LastFMProvider(
+        api_key=SecretStr("lastfm-key"),
+        http_client=_client(failure_handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+        retries=0,
+    )
+
+    assert missing.lookup_album("Missing", "Album").model_dump(exclude_defaults=True) == {}
+    assert missing.lookup_artist("Missing").model_dump(exclude_defaults=True) == {}
+    failed_album = failing.lookup_album("Nina Simone", "Pastel Blues")
+    assert failed_album.model_dump(exclude_defaults=True) == {}
+
+
+def test_lastfm_provider_retries_rate_limits_and_uses_cache(tmp_path: object) -> None:
+    """Successful Last.fm lookups should retry transient responses and be cached."""
+    request_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        if request_count == 1:
+            return httpx.Response(429, json={"message": "slow down"})
+        return httpx.Response(
+            200,
+            json={"album": {"tags": {"tag": [{"name": "jazz"}]}, "listeners": "1"}},
+        )
+
+    provider = LastFMProvider(
+        api_key=SecretStr("lastfm-key"),
+        http_client=_client(handler),
+        cache_directory=tmp_path,  # type: ignore[arg-type]
+        rate_limit_seconds=0,
+        retries=1,
+    )
+
+    first = provider.lookup_album("Nina Simone", "Pastel Blues")
+    second = provider.lookup_album("Nina Simone", "Pastel Blues")
+
+    assert first == second
+    assert first.tags == ["jazz"]
+    assert request_count == 2
+
+
+def test_lastfm_normalization_helpers_clean_tags_and_biographies() -> None:
+    """Last.fm normalization should remove duplicates, whitespace, and HTML."""
+    assert normalize_tags({"tag": [{"name": " pop "}, {"name": "soft rock"}, {"name": "Pop"}]}) == [
+        "pop",
+        "soft rock",
+    ]
+    assert normalize_biography("One&nbsp;line.<br><br><a href='x'>Second</a>.") == (
+        "One line.\n\nSecond."
+    )
 
 
 class FakeProvider:

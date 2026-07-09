@@ -8,6 +8,8 @@ from re import sub
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from plex_music_enhancer.utils.files import write_text_atomic
+
 
 class BatchJobProgress(BaseModel):
     """Persistent progress for one batch review job."""
@@ -73,8 +75,7 @@ class BatchProgressStore:
     def save(self, progress: BatchJobProgress) -> Path:
         """Persist progress and return the written path."""
         path = self.path_for(library=progress.library, missing_only=progress.missing_only)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(progress.model_dump_json(indent=2, by_alias=True) + "\n", encoding="utf-8")
+        write_text_atomic(path, progress.model_dump_json(indent=2, by_alias=True) + "\n")
         return path
 
 

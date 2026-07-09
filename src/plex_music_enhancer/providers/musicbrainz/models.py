@@ -85,3 +85,31 @@ class MusicBrainzAlbumMetadata(BaseModel):
     genres: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     release_type: str | None = None
+    catalog_number: str | None = None
+    barcode: str | None = None
+    release_country: str | None = None
+    first_release_date: str | None = None
+    producers: list[str] = Field(default_factory=list)
+    executive_producers: list[str] = Field(default_factory=list)
+    composers: list[str] = Field(default_factory=list)
+    lyricists: list[str] = Field(default_factory=list)
+    arrangers: list[str] = Field(default_factory=list)
+    orchestrators: list[str] = Field(default_factory=list)
+    conductors: list[str] = Field(default_factory=list)
+    mixing_engineers: list[str] = Field(default_factory=list)
+    mastering_engineers: list[str] = Field(default_factory=list)
+    sound_engineers: list[str] = Field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
+    recording_locations: list[str] = Field(default_factory=list)
+    studios: list[str] = Field(default_factory=list)
+    guest_musicians: list[str] = Field(default_factory=list)
+    featured_artists: list[str] = Field(default_factory=list)
+    orchestra: str | None = None
+    orchestras: list[str] = Field(default_factory=list)
+    choir: str | None = None
+    choirs: list[str] = Field(default_factory=list)
+    publisher: str | None = None
+    publishers: list[str] = Field(default_factory=list)
+    secondary_genres: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    chart_positions: list[str] = Field(default_factory=list)

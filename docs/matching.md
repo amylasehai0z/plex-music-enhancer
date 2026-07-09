@@ -60,7 +60,7 @@ the result.
 
 Match results are cached transparently.
 
-- Cache directory: `cache/musicbrainz/matches/`
+- Cache directory: `~/.plex-enhancer/cache/musicbrainz/matches/`
 - Cache key: SHA-256 of normalized artist, album, and release year
 - Cache lifetime: 30 days
 

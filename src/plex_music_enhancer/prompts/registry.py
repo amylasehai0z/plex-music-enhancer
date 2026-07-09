@@ -15,6 +15,7 @@ SUPPORTED_PLACEHOLDERS = {
     "wikipedia_extract",
     "current_summary",
     "language",
+    "additional_metadata",
 }
 PROMPT_VERSION = "1.1"
 

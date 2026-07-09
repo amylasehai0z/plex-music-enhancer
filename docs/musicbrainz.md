@@ -50,7 +50,7 @@ The client sets a project User-Agent on all requests:
 
 Detailed metadata lookups are cached transparently by MBID.
 
-- Cache directory: `cache/musicbrainz/`
+- Cache directory: `~/.plex-enhancer/cache/musicbrainz/`
 - Cache key: `<MBID>.json`
 - Cache lifetime: 30 days
 

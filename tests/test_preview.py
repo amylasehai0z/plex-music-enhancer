@@ -40,6 +40,8 @@ def test_preview_service_collects_context_and_generates_summary() -> None:
     assert document.generated_summary.text == DUMMY_SUMMARY_TEXT
     assert document.generated_summary.provider == "dummy"
     assert document.generation_time_seconds >= 0
+    assert document.qa_report is not None
+    assert "overall_score" in document.model_dump_json()
 
 
 def test_preview_service_renders_selected_album_prompt() -> None:
@@ -121,14 +123,21 @@ def test_preview_service_generates_with_openai_provider() -> None:
         "finish_reason": "completed",
     }
     assert client.responses.request["model"] == "gpt-5.5"
-    assert "Pastel Blues" in client.responses.request["input"]
-    assert (
-        "professionally crafted encyclopedic album description" in client.responses.request["input"]
-    )
-    assert "one fluent paragraph" in client.responses.request["input"]
-    assert "varied sentence openings" in client.responses.request["input"]
-    assert "ist den Genres ... zuzuordnen" in client.responses.request["input"]
-    assert "Never invent facts" in client.responses.request["input"]
+    prompt_text = client.responses.request["input"]
+    assert "Pastel Blues" in prompt_text
+    assert "concise German music encyclopedia article" in prompt_text
+    assert "coherent story" in prompt_text
+    assert "varied sentence openings" in prompt_text
+    assert "ist den Genres ... zuzuordnen" in prompt_text
+    assert "Use only the supplied metadata" in prompt_text
+    assert "Never invent" in prompt_text
+    assert "career milestones" in prompt_text
+    assert "commercial success" in prompt_text
+    assert "reception" in prompt_text
+    assert "chart success" in prompt_text
+    assert "singles" in prompt_text
+    assert "track listing" in prompt_text
+    assert "If data is missing, omit that aspect silently" in prompt_text
 
 
 class FakeContextPipeline:

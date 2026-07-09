@@ -9,6 +9,7 @@ from re import sub
 from pydantic import BaseModel, ConfigDict, Field
 
 from plex_music_enhancer.review import ReviewDocument
+from plex_music_enhancer.utils.files import write_text_atomic
 
 
 class SummaryBackup(BaseModel):
@@ -56,8 +57,7 @@ class BackupStore:
             model=generated.model,
             path=str(path),
         )
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(backup.model_dump_json(indent=2, by_alias=True) + "\n", encoding="utf-8")
+        write_text_atomic(path, backup.model_dump_json(indent=2, by_alias=True) + "\n")
         return backup
 
     def _backup_path(

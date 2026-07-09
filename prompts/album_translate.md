@@ -1,6 +1,6 @@
 # Album Translation Prompt
 
-Translate the current Plex album summary into natural {{language}}.
+Translate the current Plex album summary into natural German encyclopedia prose.
 
 Artist: {{artist}}
 Album: {{album}}
@@ -15,15 +15,16 @@ Supporting reference extract:
 
 Requirements:
 
-- Use the current Plex summary as the primary source.
-- Translate only; do not summarize or condense the text.
-- Preserve all factual information from the current summary.
-- Do not omit factual information.
-- Remove awkward wording and make the German prose natural.
-- Keep an encyclopedic, neutral style.
-- Do not invent facts or add claims that are not supported.
-- Keep artist names, album titles, song titles, label names, and proper names in their original language.
-- Translate prose only.
-- Preserve release dates and track titles exactly.
-- Do not use bullet lists or Markdown formatting.
+- Translate meaning, not wording.
+- Preserve every factual statement exactly.
+- Do not summarize, condense, omit, or add facts.
+- Improve sentence flow where needed so the German reads naturally.
+- Keep an encyclopedic, neutral tone suitable for a music reference work.
+- Preserve artist names, album titles, song titles, label names, dates, catalog information, and
+  proper names.
+- Preserve producer, songwriter, lyricist, arranger, engineer, label, recording, studio, chart,
+  certification, and guest musician information when already present.
+- Preserve track information, singles, album-structure details, concept-album context, and editorial
+  context when already present.
+- Avoid literal English phrasing, filler, marketing language, Markdown, and bullet lists.
 - Return only the translated German album summary.

@@ -67,6 +67,20 @@ class BatchReviewReport(BaseModel):
     quit_requested: bool = Field(default=False, serialization_alias="quitRequested")
     job_path: str | None = Field(default=None, serialization_alias="jobPath")
     results: list[BatchStepResult] = Field(default_factory=list)
+    average_quality_score: float | None = Field(
+        default=None,
+        serialization_alias="averageQualityScore",
+    )
+    lowest_quality_score: int | None = Field(
+        default=None,
+        serialization_alias="lowestQualityScore",
+    )
+    highest_quality_score: int | None = Field(
+        default=None,
+        serialization_alias="highestQualityScore",
+    )
+    albums_below_threshold: int = Field(default=0, serialization_alias="albumsBelowThreshold")
+    albums_requiring_review: int = Field(default=0, serialization_alias="albumsRequiringReview")
 
 
 class BatchReviewStep(BaseModel):
@@ -274,6 +288,8 @@ def _add_step_result(
     job_path: object,
 ) -> BatchReviewReport:
     """Return a report with one step result counted."""
+    results = [*report.results, result]
+    scores = _quality_scores(results)
     return report.model_copy(
         update={
             "processed": report.processed + 1,
@@ -281,9 +297,31 @@ def _add_step_result(
             "skipped": report.skipped + (1 if result.status == "SKIPPED" else 0),
             "failed": report.failed + (1 if result.status == "FAILED" else 0),
             "job_path": str(job_path),
-            "results": [*report.results, result],
+            "results": results,
+            "average_quality_score": (
+                round(sum(scores) / len(scores), 2) if scores else report.average_quality_score
+            ),
+            "lowest_quality_score": min(scores) if scores else report.lowest_quality_score,
+            "highest_quality_score": max(scores) if scores else report.highest_quality_score,
+            "albums_below_threshold": sum(1 for score in scores if score < 80),
+            "albums_requiring_review": sum(1 for score in scores if score < 90),
         }
     )
+
+
+def _quality_scores(results: list[BatchStepResult]) -> list[int]:
+    """Return QA scores found in batch apply results."""
+    scores: list[int] = []
+    for result in results:
+        qa_report = (
+            result.apply_result.review.preview.qa_report
+            if result.apply_result is not None
+            and result.apply_result.review.preview.qa_report is not None
+            else None
+        )
+        if qa_report is not None:
+            scores.append(qa_report.overall_score)
+    return scores
 
 
 def _skipped_result(

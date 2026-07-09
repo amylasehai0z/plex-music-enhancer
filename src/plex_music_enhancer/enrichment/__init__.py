@@ -3,6 +3,10 @@
 from plex_music_enhancer.enrichment.models import (
     AlbumContext,
     ArtistContext,
+    DiscogsAlbumContext,
+    DiscogsArtistContext,
+    LastFMAlbumContext,
+    LastFMArtistContext,
     MusicBrainzAlbumContext,
     MusicBrainzArtistContext,
     PipelineContext,
@@ -15,6 +19,10 @@ from plex_music_enhancer.enrichment.models import (
 __all__ = [
     "AlbumContext",
     "ArtistContext",
+    "DiscogsAlbumContext",
+    "DiscogsArtistContext",
+    "LastFMAlbumContext",
+    "LastFMArtistContext",
     "EnrichmentPipeline",
     "EnrichmentPipelineError",
     "MusicBrainzAlbumContext",

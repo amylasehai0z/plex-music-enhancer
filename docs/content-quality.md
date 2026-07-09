@@ -31,7 +31,7 @@ The analyzer evaluates:
 - detected language
 - summary length
 - sentence readability
-- placeholder markers such as `TODO` or template variables
+- unresolved task markers or template variables
 - repeated three-word phrases
 - awkward machine-translation-like German wording
 - excessive whitespace

@@ -18,6 +18,7 @@ from plex_music_enhancer.planner import (
     PlannedAlbum,
 )
 from plex_music_enhancer.review import ReviewDocument, ReviewService
+from plex_music_enhancer.utils.files import write_text_atomic
 
 LibraryReviewStatus = Literal["APPROVED", "SKIPPED", "APPLIED", "FAILED"]
 ActionCounts = dict[EnrichmentAction, int]
@@ -160,12 +161,8 @@ class LibrarySessionStore:
     def save(self, session: LibraryReviewSession) -> Path:
         """Persist a session and return its path."""
         path = self.path_for(session.library)
-        path.parent.mkdir(parents=True, exist_ok=True)
         updated = session.model_copy(update={"updated_at": datetime.now(tz=UTC)})
-        path.write_text(
-            updated.model_dump_json(indent=2) + "\n",
-            encoding="utf-8",
-        )
+        write_text_atomic(path, updated.model_dump_json(indent=2) + "\n")
         return path
 
 

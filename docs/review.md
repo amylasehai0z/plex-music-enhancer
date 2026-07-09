@@ -1,7 +1,7 @@
 # Review Workflow
 
 The review command lets a user inspect, edit, and approve generated summaries before any Plex write
-workflow exists.
+is performed.
 
 ```text
 plex-enhancer review --artist "Artist" --album "Album"
@@ -25,12 +25,13 @@ Options:
 
 ## Interactive Choices
 
-- `A` Apply: not implemented yet. If quality does not pass, Apply is blocked.
+- `A` Apply: applies the approved summary through the safe apply workflow when quality passes.
 - `E` Edit: opens the terminal editor, then revalidates and redraws the diff.
 - `S` Skip: exits without changes.
 - `Q` Quit: exits without changes.
 
-Apply intentionally performs no Plex writes in this milestone.
+Apply creates a backup, writes the approved summary, reloads the Plex object, verifies the result,
+and stores an audit record.
 
 ## Quality Checks
 
@@ -40,17 +41,18 @@ The review workflow creates a `QualityReport` with these checks:
 - configured word-count range
 - no Markdown
 - no bullet lists
-- no placeholder text
+- no unresolved template or test text
 - non-empty output
 
 Status values:
 
 - `PASS`: no warnings or failures
 - `WARNINGS`: editable issues such as length or language signal
-- `FAILED`: output that can never be applied, such as empty text, Markdown, bullets, or placeholders
+- `FAILED`: output that can never be applied, such as empty text, Markdown, bullets, or unresolved template text
 
-Generated or edited summaries must pass validation before Apply can ever be enabled.
+Generated or edited summaries must pass validation before Apply is allowed.
 
 ## Safety
 
-Review is read-only. It does not modify Plex, create backups, apply metadata, or perform rollback.
+Review remains read-only until the user explicitly chooses Apply. Normal apply writes are backed up,
+verified after reload, and audited.

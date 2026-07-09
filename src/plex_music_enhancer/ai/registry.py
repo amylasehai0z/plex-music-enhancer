@@ -43,7 +43,7 @@ class AIProviderRegistry:
 
         factory = self._factories.get(normalized_name)
         if factory is None:
-            msg = f'AI provider "{normalized_name}" is known but not implemented yet.'
+            msg = f'AI provider "{normalized_name}" is reserved but unavailable in this release.'
             raise AIProviderNotImplementedError(msg)
 
         return factory(settings)

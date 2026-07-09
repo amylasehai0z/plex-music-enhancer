@@ -17,6 +17,8 @@ from plex_music_enhancer.enrichment import (
     WikipediaAlbumContext,
 )
 from plex_music_enhancer.prompts import RenderedPrompt
+from plex_music_enhancer.quality import QualityLevel
+from plex_music_enhancer.quality import QualityReport as QAReport
 from plex_music_enhancer.review import QualityReport, ReviewDocument
 from plex_music_enhancer.services import EnrichmentPreviewDocument
 
@@ -90,6 +92,80 @@ def test_apply_service_does_not_write_when_quality_fails(tmp_path: Path) -> None
     assert result.write_successful is False
     assert result.audit_stored is False
     assert album.calls == []
+
+
+def test_apply_service_does_not_write_when_backup_fails(tmp_path: Path) -> None:
+    """Backup failures should stop before Plex mutation."""
+    album = FakeAlbum(summary="Aktuelle Plex-Zusammenfassung.")
+    service = _apply_service(
+        tmp_path=tmp_path,
+        album=album,
+        backup_store=FailingBackupStore(directory=tmp_path / "exports" / "backups"),
+    )
+
+    result = service.apply_album_summary(artist="Nina Simone", album="Pastel Blues")
+
+    assert result.status == "FAILED"
+    assert result.backup_created is False
+    assert result.write_successful is False
+    assert result.audit_stored is False
+    assert "Unable to create backup" in result.message
+    assert album.calls == []
+
+
+def test_apply_service_reports_audit_failure_after_write(tmp_path: Path) -> None:
+    """Audit failures should return a structured failure result."""
+    album = FakeAlbum(summary="Aktuelle Plex-Zusammenfassung.")
+    service = _apply_service(
+        tmp_path=tmp_path,
+        album=album,
+        audit_store=FailingAuditStore(directory=tmp_path / "exports" / "audit"),
+    )
+
+    result = service.apply_album_summary(artist="Nina Simone", album="Pastel Blues")
+
+    assert result.status == "FAILED"
+    assert result.backup_created is True
+    assert result.write_successful is True
+    assert result.verification_passed is True
+    assert result.audit_stored is False
+    assert result.audit_path is None
+    assert "Audit storage failed" in result.message
+
+
+def test_apply_service_blocks_below_configured_qa_score(tmp_path: Path) -> None:
+    """Configured QA thresholds should block writes before backup unless forced."""
+    album = FakeAlbum(summary="Aktuelle Plex-Zusammenfassung.")
+    service = _apply_service(
+        tmp_path=tmp_path,
+        album=album,
+        minimum_quality_score=90,
+        qa_score=82,
+    )
+
+    result = service.apply_album_summary(artist="Nina Simone", album="Pastel Blues")
+
+    assert result.status == "FAILED"
+    assert result.backup_created is False
+    assert "Minimum quality: 90" in result.message
+    assert album.calls == []
+
+
+def test_apply_service_force_overrides_qa_threshold(tmp_path: Path) -> None:
+    """Force should allow an explicitly approved low-QA write."""
+    album = FakeAlbum(summary="Aktuelle Plex-Zusammenfassung.")
+    service = _apply_service(
+        tmp_path=tmp_path,
+        album=album,
+        minimum_quality_score=90,
+        force_quality=True,
+        qa_score=82,
+    )
+
+    result = service.apply_album_summary(artist="Nina Simone", album="Pastel Blues")
+
+    assert result.status == "SUCCESS"
+    assert result.backup_created is True
 
 
 def test_backup_store_creates_backup_file(tmp_path: Path) -> None:
@@ -191,27 +267,54 @@ class FakeAlbum:
         return self
 
 
+class FailingBackupStore(BackupStore):
+    """Backup store that fails deterministically."""
+
+    def create_backup(self, review: ReviewDocument):
+        """Raise instead of writing a backup."""
+        del review
+        raise OSError("disk full")
+
+
+class FailingAuditStore(AuditStore):
+    """Audit store that fails deterministically."""
+
+    def create_record(self, **kwargs):  # type: ignore[no-untyped-def]
+        """Raise instead of writing an audit record."""
+        del kwargs
+        raise OSError("audit path unavailable")
+
+
 def _apply_service(
     *,
     tmp_path: Path,
     album: FakeAlbum,
     quality_status: str = "PASS",
+    minimum_quality_score: int | None = None,
+    force_quality: bool = False,
+    qa_score: int | None = None,
+    backup_store: BackupStore | None = None,
+    audit_store: AuditStore | None = None,
 ) -> ApplyService:
     """Create an apply service with fake dependencies."""
     return ApplyService(
-        review_service=FakeReviewService(_review_document(status=quality_status)),  # type: ignore[arg-type]
+        review_service=FakeReviewService(
+            _review_document(status=quality_status, qa_score=qa_score)
+        ),  # type: ignore[arg-type]
         base_url="http://localhost:32400",
         token=SecretStr("secret-token"),
-        backup_store=BackupStore(directory=tmp_path / "exports" / "backups"),
-        audit_store=AuditStore(directory=tmp_path / "exports" / "audit"),
+        backup_store=backup_store or BackupStore(directory=tmp_path / "exports" / "backups"),
+        audit_store=audit_store or AuditStore(directory=tmp_path / "exports" / "audit"),
         album_loader=lambda rating_key: album,
+        minimum_quality_score=minimum_quality_score,
+        force_quality=force_quality,
     )
 
 
-def _review_document(*, status: str = "PASS") -> ReviewDocument:
+def _review_document(*, status: str = "PASS", qa_score: int | None = None) -> ReviewDocument:
     """Return a review document fixture."""
     return ReviewDocument(
-        preview=_preview_document(),
+        preview=_preview_document(qa_score=qa_score),
         current_summary="Aktuelle Plex-Zusammenfassung.",
         proposed_summary=_german_summary() if status == "PASS" else "",
         diff="--- current summary\n+++ generated summary\n",
@@ -232,7 +335,7 @@ def _review_document(*, status: str = "PASS") -> ReviewDocument:
     )
 
 
-def _preview_document() -> EnrichmentPreviewDocument:
+def _preview_document(*, qa_score: int | None = None) -> EnrichmentPreviewDocument:
     """Return preview document fixture."""
     return EnrichmentPreviewDocument(
         context=_album_context(),
@@ -256,6 +359,14 @@ def _preview_document() -> EnrichmentPreviewDocument:
             metadata={"prompt_tokens": 100, "completion_tokens": 40},
         ),
         generation_time_seconds=0.25,
+        qa_report=(
+            QAReport(
+                overall_score=qa_score,
+                quality_level=QualityLevel.FAIR,
+            )
+            if qa_score is not None
+            else None
+        ),
     )
 
 

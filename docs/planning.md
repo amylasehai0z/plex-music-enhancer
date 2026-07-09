@@ -50,7 +50,7 @@ German summaries are scored from `0` to `100` before an action is chosen. The an
 - detected language
 - summary length
 - readability
-- placeholder text
+- unresolved template or test text
 - duplicated phrases
 - machine-translation-like wording
 - excessive whitespace

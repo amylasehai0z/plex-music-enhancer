@@ -78,9 +78,7 @@ def test_translation_accepts_long_english_summary() -> None:
     assert document.validation.word_count > 100
     assert ai_manager.prompt is not None
     assert summary in ai_manager.prompt.rendered_text
-    assert (
-        "Translate only; do not summarize or condense the text." in ai_manager.prompt.rendered_text
-    )
+    assert "Do not summarize, condense, omit, or add facts." in ai_manager.prompt.rendered_text
 
 
 def test_translation_rejects_already_german_summary() -> None:
@@ -107,9 +105,9 @@ def test_translation_prompt_preserves_punctuation_and_titles() -> None:
     rendered = ai_manager.prompt.rendered_text
     assert '"Sinnerman", "Strange Fruit".' in rendered
     assert "1965-10-01" in rendered
-    assert "Keep artist names, album titles, song titles" in rendered
-    assert "Preserve release dates and track titles exactly." in rendered
-    assert "Translate prose only." in rendered
+    assert "Preserve artist names, album titles, song titles" in rendered
+    assert "dates, catalog information, and" in rendered
+    assert "Translate meaning, not wording." in rendered
 
 
 class FakePipeline:

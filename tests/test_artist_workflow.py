@@ -9,7 +9,13 @@ from pydantic import SecretStr
 
 from plex_music_enhancer.ai import GeneratedSummary
 from plex_music_enhancer.apply import ApplyService, AuditStore, BackupStore
-from plex_music_enhancer.enrichment import EnrichmentPipeline
+from plex_music_enhancer.editorial import ArtistEditorialComposer
+from plex_music_enhancer.editorial.composer import render_editorial_context
+from plex_music_enhancer.enrichment import (
+    DiscogsArtistContext,
+    EnrichmentPipeline,
+    LastFMArtistContext,
+)
 from plex_music_enhancer.prompts import RenderedPrompt
 from plex_music_enhancer.providers.musicbrainz import (
     MusicBrainzAlias,
@@ -28,6 +34,8 @@ def test_enrichment_pipeline_collects_artist_context() -> None:
         SecretStr("token"),
         musicbrainz_provider=FakeMusicBrainzProvider(),
         wikipedia_provider=FakeWikipediaProvider(),
+        discogs_provider=FakeDiscogsProvider(),
+        lastfm_provider=FakeLastFMProvider(),
         plex_server_factory=FakePlexServer,
     )
 
@@ -38,7 +46,29 @@ def test_enrichment_pipeline_collects_artist_context() -> None:
     assert context.musicbrainz.artist_mbid == "artist-mbid"
     assert context.musicbrainz.genres == ["jazz", "soul"]
     assert context.wikipedia.language == "de"
+    assert context.full_name == "Nina Simone"
+    assert context.aliases == ["Eunice Waymon"]
+    assert context.birth_date == "1933-02-21"
+    assert context.death_date == "2003-04-21"
+    assert context.styles == ["Vocal Jazz"]
+    assert context.biography == "Nina Simone war eine US-amerikanische Musikerin."
+    assert context.fact_collection.by_category("birth_date")[0].confidence_score >= 0.9
     assert context.pipeline.ready_for_generation is True
+
+
+def test_artist_editorial_composer_builds_biography_guidance() -> None:
+    """Artist composer should produce reusable biography guidance."""
+    context = FakeArtistPipeline().collect_artist_context(artist="Nina Simone")
+
+    editorial = ArtistEditorialComposer().compose_artist(context)
+    rendered = render_editorial_context(editorial)
+
+    assert editorial.recommended_story_order is not None
+    assert "Introduction" in editorial.recommended_story_order
+    assert "Origins" in editorial.recommended_story_order
+    assert "Musical style" in editorial.recommended_story_order
+    assert "Verified facts:" in rendered
+    assert "never resolve conflicting facts by guessing" in rendered
 
 
 def test_preview_and_review_generate_artist_biography() -> None:
@@ -55,10 +85,12 @@ def test_preview_and_review_generate_artist_biography() -> None:
     review = review_service.create_artist_review(artist="Nina Simone")
 
     assert preview.context.plex.artist == "Nina Simone"
+    assert preview.context.fact_collection.facts
     assert preview.generated_summary.text == _german_summary()
     assert review.current_summary == "Aktuelle Biografie."
     assert review.proposed_summary == _german_summary()
     assert review.quality.status == "PASS"
+    assert review.style.overall_style
 
 
 def test_apply_service_writes_artist_biography(tmp_path: Path) -> None:
@@ -192,6 +224,49 @@ class FakeWikipediaProvider:
         return None
 
 
+class FakeDiscogsProvider:
+    """Fake optional Discogs provider."""
+
+    configured = True
+
+    def lookup_artist(self, artist: str) -> DiscogsArtistContext:
+        """Return fake Discogs artist context."""
+        assert artist == "Nina Simone"
+        return DiscogsArtistContext(
+            profile="Discogs profile.",
+            aliases=["Eunice Waymon"],
+            genres=["Jazz"],
+            styles=["Vocal Jazz"],
+            active_years="1954-2003",
+        )
+
+    def lookup_album(self, artist: str, album: str) -> object:
+        """Unused album lookup."""
+        del artist, album
+        raise AssertionError("album lookup should not be used")
+
+
+class FakeLastFMProvider:
+    """Fake optional Last.fm provider."""
+
+    configured = True
+
+    def lookup_artist(self, artist: str) -> LastFMArtistContext:
+        """Return fake Last.fm artist context."""
+        assert artist == "Nina Simone"
+        return LastFMArtistContext(
+            biography="Last.fm biography.",
+            short_biography="Last.fm short biography.",
+            tags=["soul"],
+            similar_artists=["Billie Holiday"],
+        )
+
+    def lookup_album(self, artist: str, album: str) -> object:
+        """Unused album lookup."""
+        del artist, album
+        raise AssertionError("album lookup should not be used")
+
+
 class FakeArtistPipeline:
     """Fake artist context pipeline."""
 
@@ -202,6 +277,8 @@ class FakeArtistPipeline:
             SecretStr("token"),
             musicbrainz_provider=FakeMusicBrainzProvider(),
             wikipedia_provider=FakeWikipediaProvider(),
+            discogs_provider=FakeDiscogsProvider(),
+            lastfm_provider=FakeLastFMProvider(),
             plex_server_factory=FakePlexServer,
         )
         return pipeline.collect_artist_context(artist=artist)

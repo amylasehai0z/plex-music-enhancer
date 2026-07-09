@@ -17,8 +17,9 @@ from plex_music_enhancer.providers.musicbrainz.models import (
     MusicBrainzArtistSearchResult,
     MusicBrainzLifeSpan,
 )
+from plex_music_enhancer.utils.files import write_text_atomic
 
-CACHE_DIRECTORY = Path("cache/musicbrainz")
+CACHE_DIRECTORY = Path.home() / ".plex-enhancer" / "cache" / "musicbrainz"
 CACHE_TTL = timedelta(days=30)
 
 
@@ -133,7 +134,12 @@ class MusicBrainzProvider:
         if cached is None:
             cached = self._client.get_json(
                 f"/release-group/{mbid}",
-                params={"inc": "artist-credits+tags+genres"},
+                params={
+                    "inc": (
+                        "artist-credits+tags+genres+artist-rels+label-rels+url-rels+"
+                        "work-rels+place-rels+recording-rels"
+                    )
+                },
             )
             self._write_cache(mbid, cached)
 
@@ -146,6 +152,36 @@ class MusicBrainzProvider:
             genres=_tag_names(cached.get("genres")),
             tags=_tag_names(cached.get("tags")),
             release_type=_release_type(cached),
+            catalog_number=_catalog_number(cached),
+            barcode=_string(cached.get("barcode")),
+            release_country=_string(cached.get("country")),
+            first_release_date=first_release_date,
+            producers=_relation_names(cached, {"producer"}),
+            executive_producers=_relation_names(cached, {"executive producer"}),
+            composers=_relation_names(cached, {"composer"}),
+            lyricists=_relation_names(cached, {"lyricist"}),
+            arrangers=_relation_names(cached, {"arranger"}),
+            orchestrators=_relation_names(cached, {"orchestrator"}),
+            conductors=_relation_names(cached, {"conductor"}),
+            mixing_engineers=_relation_names(cached, {"mix", "mixing", "mixing engineer"}),
+            mastering_engineers=_relation_names(cached, {"mastering", "mastering engineer"}),
+            sound_engineers=_relation_names(cached, {"engineer", "sound engineer"}),
+            labels=_labels(cached),
+            recording_locations=_relation_names(
+                cached,
+                {"recording location", "recorded at", "recorded in"},
+            ),
+            studios=_relation_names(cached, {"recording studio", "studio"}),
+            guest_musicians=_relation_names(cached, {"guest musician", "instrument"}),
+            featured_artists=_featured_artists(cached),
+            orchestras=_relation_names(cached, {"orchestra"}),
+            choir=_first(_relation_names(cached, {"choir"})),
+            choirs=_relation_names(cached, {"choir"}),
+            publisher=_first(_relation_names(cached, {"publisher"})),
+            publishers=_relation_names(cached, {"publisher"}),
+            secondary_genres=_tag_names(cached.get("secondary-genres")),
+            certifications=_relation_names(cached, {"certification"}),
+            chart_positions=_relation_names(cached, {"chart position"}),
         )
 
     def _first_release_mbid(self, release_group_mbid: str) -> str | None:
@@ -180,9 +216,8 @@ class MusicBrainzProvider:
 
     def _write_cache(self, mbid: str, payload: dict[str, Any]) -> None:
         """Write an MBID cache entry."""
-        self._cache_directory.mkdir(parents=True, exist_ok=True)
         cache_entry = MusicBrainzCacheEntry(cached_at=datetime.now(tz=UTC), payload=payload)
-        self._cache_path(mbid).write_text(cache_entry.model_dump_json(indent=2), encoding="utf-8")
+        write_text_atomic(self._cache_path(mbid), cache_entry.model_dump_json(indent=2))
 
     def _cache_path(self, mbid: str) -> Path:
         """Return the cache path for an MBID."""
@@ -276,6 +311,122 @@ def _tag_names(value: object) -> list[str]:
             names.append(name)
 
     return names
+
+
+def _labels(item: dict[str, Any]) -> list[str]:
+    """Parse labels from MusicBrainz payloads when present."""
+    names: list[str] = []
+    for key in ("label-info", "labels"):
+        value = item.get(key)
+        if not isinstance(value, list):
+            continue
+
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            label = entry.get("label")
+            if isinstance(label, dict):
+                name = _string(label.get("name"))
+            else:
+                name = _string(entry.get("name"))
+            if name is not None:
+                names.append(name)
+
+    names.extend(_relation_names(item, {"label"}))
+    return _dedupe(names)
+
+
+def _catalog_number(item: dict[str, Any]) -> str | None:
+    """Parse the first catalog number from MusicBrainz payloads."""
+    label_info = item.get("label-info")
+    if not isinstance(label_info, list):
+        return None
+
+    for entry in label_info:
+        if not isinstance(entry, dict):
+            continue
+        catalog_number = _string(entry.get("catalog-number"))
+        if catalog_number is not None:
+            return catalog_number
+
+    return None
+
+
+def _featured_artists(item: dict[str, Any]) -> list[str]:
+    """Parse featured artists from relations and artist credits."""
+    names = _relation_names(item, {"featured", "featured artist"})
+    for credit in _artist_credit_entries(item):
+        joinphrase = _string(credit.get("joinphrase")) or ""
+        if "feat" not in joinphrase.casefold():
+            continue
+        artist = credit.get("artist")
+        if isinstance(artist, dict):
+            name = _string(artist.get("name"))
+        else:
+            name = _string(credit.get("name"))
+        if name is not None:
+            names.append(name)
+
+    return _dedupe(names)
+
+
+def _relation_names(item: dict[str, Any], relation_types: set[str]) -> list[str]:
+    """Parse relation target names for selected MusicBrainz relation types."""
+    relations = item.get("relations")
+    if not isinstance(relations, list):
+        return []
+
+    names: list[str] = []
+    normalized_types = {relation_type.casefold() for relation_type in relation_types}
+    for relation in relations:
+        if not isinstance(relation, dict):
+            continue
+        relation_type = _string(relation.get("type"))
+        if relation_type is None or relation_type.casefold() not in normalized_types:
+            continue
+        name = _relation_target_name(relation)
+        if name is not None:
+            names.append(name)
+
+    return _dedupe(names)
+
+
+def _relation_target_name(relation: dict[str, Any]) -> str | None:
+    """Return a MusicBrainz relation target display name."""
+    for key in ("artist", "label", "place", "area", "url", "work"):
+        value = relation.get(key)
+        if isinstance(value, dict):
+            name = _string(value.get("name")) or _string(value.get("resource"))
+            if name is not None:
+                return name
+
+    return _string(relation.get("name")) or _string(relation.get("target"))
+
+
+def _artist_credit_entries(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return valid artist credit entries."""
+    credits = item.get("artist-credit")
+    if not isinstance(credits, list):
+        return []
+    return [credit for credit in credits if isinstance(credit, dict)]
+
+
+def _first(values: list[str]) -> str | None:
+    """Return the first value."""
+    return values[0] if values else None
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    """Return values without case-insensitive duplicates."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        key = value.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return result
 
 
 def _artist_credit(item: dict[str, Any]) -> str | None:

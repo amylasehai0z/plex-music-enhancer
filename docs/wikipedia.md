@@ -42,7 +42,7 @@ can merge Wikipedia summaries with other providers.
 Successful summaries are cached under:
 
 ```text
-cache/wikipedia/
+~/.plex-enhancer/cache/wikipedia/
 ```
 
 Cache entries are keyed by lookup kind, language, and normalized query. Entries expire after

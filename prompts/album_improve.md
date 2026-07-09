@@ -1,6 +1,6 @@
 # Album Improvement Prompt
 
-Improve the existing German Plex album summary.
+Improve the existing German Plex album summary as concise music encyclopedia prose.
 
 Artist: {{artist}}
 Album: {{album}}
@@ -15,14 +15,15 @@ Supporting reference extract:
 
 Requirements:
 
-- Improve wording only.
-- Preserve all factual content from the current summary.
-- Preserve every factual statement.
-- Improve readability, flow, grammar, and sentence rhythm.
-- Avoid repetition.
-- Keep a neutral encyclopedic tone.
-- Do not invent facts or add unsupported claims.
-- Keep names, dates, album titles, song titles, label names, and proper names unchanged.
-- Use fluent encyclopedic German suitable for Plex.
-- Do not use bullet lists or Markdown formatting.
+- Preserve every factual statement, name, date, title, label, and catalog detail.
+- Do not invent, remove, soften, or reinterpret facts.
+- Remove repetition and awkward phrasing.
+- Improve readability, transitions, rhythm, and paragraph flow.
+- Prefer natural German over literal or AI-style wording.
+- Keep a neutral, encyclopedic music-reference tone.
+- Preserve producer, songwriter, lyricist, arranger, engineer, label, recording, studio, chart,
+  certification, and guest musician information when already present.
+- Preserve track information, singles, album-structure details, concept-album context, and editorial
+  context when already present.
+- Do not use bullet lists, Markdown formatting, or marketing language.
 - Return only the improved German album summary.

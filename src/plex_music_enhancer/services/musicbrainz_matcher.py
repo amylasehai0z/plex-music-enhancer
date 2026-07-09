@@ -16,6 +16,7 @@ from plex_music_enhancer.providers.musicbrainz import (
     MusicBrainzArtistSearchResult,
     MusicBrainzProvider,
 )
+from plex_music_enhancer.utils.files import write_text_atomic
 
 try:  # pragma: no cover - exercised when rapidfuzz is installed.
     from rapidfuzz import fuzz
@@ -33,7 +34,7 @@ except ModuleNotFoundError:  # pragma: no cover - local fallback for constrained
     fuzz = _FallbackFuzz()
 
 
-CACHE_DIRECTORY = Path("cache/musicbrainz/matches")
+CACHE_DIRECTORY = Path.home() / ".plex-enhancer" / "cache" / "musicbrainz" / "matches"
 CACHE_TTL = timedelta(days=30)
 MATCH_THRESHOLD = 75
 ARTIST_THRESHOLD = 70
@@ -214,9 +215,8 @@ class MusicBrainzMatcher:
 
     def _write_cache(self, cache_key: str, result: MatchResult) -> None:
         """Write a match result to cache."""
-        self._cache_directory.mkdir(parents=True, exist_ok=True)
         entry = MatchCacheEntry(cached_at=datetime.now(tz=UTC), result=result)
-        self._cache_path(cache_key).write_text(entry.model_dump_json(indent=2), encoding="utf-8")
+        write_text_atomic(self._cache_path(cache_key), entry.model_dump_json(indent=2))
 
     def _cache_path(self, cache_key: str) -> Path:
         """Return a cache path for a match key."""

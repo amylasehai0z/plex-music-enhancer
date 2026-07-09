@@ -30,6 +30,9 @@ class ReviewRenderer:
         self._console.rule("UNIFIED DIFF")
         self._console.print(Panel(document.diff or "No changes.", expand=False))
         self.render_quality(document.quality)
+        self.render_style(document)
+        self.render_editorial_quality(document)
+        self.render_verification(document)
 
     def render_quality(self, report: QualityReport) -> None:
         """Render a quality report."""
@@ -68,6 +71,65 @@ class ReviewRenderer:
         table.add_row("Detected issues", ", ".join(issue.value for issue in plan.quality.issues))
         table.add_row("Recommended action", plan.action.value)
         table.add_row("Reason", plan.reason)
+        self._console.print(table)
+
+    def render_style(self, document: ReviewDocument) -> None:
+        """Render German editorial style diagnostics."""
+        style = document.style
+        table = Table(title="STYLE ANALYSIS", show_header=False)
+        table.add_column("Metric", style="bold")
+        table.add_column("Result")
+        table.add_row("Sentence variation", style.sentence_variation)
+        table.add_row("Vocabulary diversity", style.vocabulary_diversity)
+        table.add_row("Repetition", style.repetition)
+        table.add_row("Readability", style.readability)
+        table.add_row("LLM clichés", style.llm_cliches)
+        table.add_row("Passive voice", style.passive_voice)
+        table.add_row("Overall style", style.overall_style)
+        table.add_row("Readability score", str(style.readability_score))
+        if style.issues:
+            table.add_row("Issues", ", ".join(style.issues))
+        self._console.print(table)
+
+    def render_verification(self, document: ReviewDocument) -> None:
+        """Render a compact fact verification summary."""
+        collection = getattr(document.preview.context, "fact_collection", None)
+        if collection is None:
+            return
+
+        table = Table(title="VERIFICATION SUMMARY", show_header=False)
+        table.add_column("Field", style="bold")
+        table.add_column("Value")
+        verified = collection.by_state("verified")
+        probable = collection.by_state("probable")
+        weak = collection.by_state("weak")
+        table.add_row("Verified facts", str(len([fact for fact in verified if fact.value])))
+        table.add_row("Probable facts", str(len([fact for fact in probable if fact.value])))
+        table.add_row("Weak facts", str(len([fact for fact in weak if fact.value])))
+        table.add_row("Conflicts", str(len(collection.conflicts)))
+        if collection.missing_facts:
+            table.add_row("Missing", ", ".join(collection.missing_facts[:8]))
+        self._console.print(table)
+
+    def render_editorial_quality(self, document: ReviewDocument) -> None:
+        """Render deterministic editorial QA results."""
+        report = getattr(document.preview, "qa_report", None)
+        if report is None:
+            return
+
+        table = Table(title="EDITORIAL QUALITY", show_header=False)
+        table.add_column("Metric", style="bold")
+        table.add_column("Value")
+        table.add_row("Overall Score", str(report.overall_score))
+        level = report.overall_level or report.quality_level
+        table.add_row("Quality Level", level.value if level is not None else "UNKNOWN")
+        for check in report.checks:
+            table.add_row(check.category.value, check.status.value)
+        if report.recommendations:
+            table.add_row(
+                "Missing Opportunities",
+                "\n".join(str(recommendation) for recommendation in report.recommendations[:8]),
+            )
         self._console.print(table)
 
 

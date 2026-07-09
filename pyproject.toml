@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "plex-music-enhancer"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Production-grade tools for improving Plex music libraries."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "Plex Music Enhancer contributors" }]
 keywords = ["plex", "music", "metadata", "cli"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Intended Audience :: End Users/Desktop",
   "License :: OSI Approved :: MIT License",
@@ -38,12 +38,14 @@ ai = [
   "openai>=1.0,<2.0",
 ]
 dev = [
+  "build>=1.2,<2.0",
   "black>=24.4,<26.0",
   "pre-commit>=3.7,<5.0",
   "pytest>=8.2,<9.0",
   "pytest-cov>=5.0,<8.0",
   "pytest-httpx>=0.30,<1.0",
   "ruff>=0.5,<1.0",
+  "twine>=5.1,<7.0",
 ]
 metadata = [
   "beautifulsoup4>=4.12,<5.0",
@@ -53,8 +55,17 @@ metadata = [
 [project.scripts]
 plex-enhancer = "plex_music_enhancer.cli:app"
 
+[project.urls]
+Changelog = "https://github.com/plex-music-enhancer/plex-music-enhancer/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/plex-music-enhancer/plex-music-enhancer#readme"
+Issues = "https://github.com/plex-music-enhancer/plex-music-enhancer/issues"
+Repository = "https://github.com/plex-music-enhancer/plex-music-enhancer"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/plex_music_enhancer"]
+
+[tool.hatch.version]
+path = "src/plex_music_enhancer/constants.py"
 
 [tool.black]
 line-length = 100

@@ -12,8 +12,9 @@ from pydantic import BaseModel, ConfigDict
 
 from plex_music_enhancer.providers.base import AlbumMetadata, ArtistMetadata
 from plex_music_enhancer.providers.wikipedia.client import WikipediaClient
+from plex_music_enhancer.utils.files import write_text_atomic
 
-DEFAULT_CACHE_DIRECTORY = Path("cache/wikipedia")
+DEFAULT_CACHE_DIRECTORY = Path.home() / ".plex-enhancer" / "cache" / "wikipedia"
 DEFAULT_CACHE_TTL = timedelta(days=30)
 DEFAULT_LANGUAGES = ("de", "en")
 SOURCE_NAME = "wikipedia"
@@ -165,10 +166,9 @@ class WikipediaProvider:
         summary: WikipediaSummary,
     ) -> None:
         """Persist a summary cache entry."""
-        self._cache_directory.mkdir(parents=True, exist_ok=True)
         cache_file = self._cache_file(kind=kind, language=language, query=query)
         entry = _CacheEntry(cached_at=datetime.now(UTC), summary=summary)
-        cache_file.write_text(entry.model_dump_json(indent=2), encoding="utf-8")
+        write_text_atomic(cache_file, entry.model_dump_json(indent=2))
 
     def _cache_file(self, *, kind: str, language: str, query: str) -> Path:
         """Return the cache file for a lookup."""

@@ -9,6 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from plex_music_enhancer.utils.files import write_text_atomic
+
 ApplyStatus = Literal["SUCCESS", "FAILED"]
 
 
@@ -89,8 +91,7 @@ class AuditStore:
             message=message,
             path=str(path),
         )
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(record.model_dump_json(indent=2, by_alias=True) + "\n", encoding="utf-8")
+        write_text_atomic(path, record.model_dump_json(indent=2, by_alias=True) + "\n")
         return record
 
     def _audit_path(

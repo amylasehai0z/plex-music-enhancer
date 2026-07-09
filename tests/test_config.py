@@ -37,3 +37,10 @@ def test_settings_ignore_dotenv_during_tests(monkeypatch, tmp_path: Path) -> Non
     assert settings.plex_url is None
     assert settings.plex_token is None
     assert settings.has_plex_configuration is False
+
+
+def test_performance_database_location_expands_home() -> None:
+    """Database path configuration should expand user-home markers."""
+    settings = Settings(performance={"database_location": "~/.plex-enhancer/test.sqlite3"})
+
+    assert str(settings.performance.database_location).startswith(str(Path.home()))

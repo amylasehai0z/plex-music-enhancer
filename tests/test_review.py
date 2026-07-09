@@ -16,6 +16,8 @@ from plex_music_enhancer.enrichment import (
     WikipediaAlbumContext,
 )
 from plex_music_enhancer.prompts import RenderedPrompt
+from plex_music_enhancer.quality import QualityLevel
+from plex_music_enhancer.quality import QualityReport as QAReport
 from plex_music_enhancer.review import ReviewLimits, ReviewRenderer, ReviewService
 from plex_music_enhancer.review.diff import unified_summary_diff
 from plex_music_enhancer.review.service import validate_summary_quality
@@ -73,6 +75,63 @@ def test_quality_validation_rejects_empty_markdown_bullets_and_placeholders() ->
     assert "Summary contains bullet lists." in bullet.failures
 
 
+def test_quality_validation_warns_for_repetitive_sentence_starts() -> None:
+    """Editorial validation should detect repeated sentence openings."""
+    report = validate_summary_quality(
+        "Das Album erschien 1975 bei einem bekannten Label. "
+        "Das Album verbindet Rock mit ruhigen Balladen. "
+        "Das Album wurde von einem erfahrenen Produzenten betreut.",
+        limits=ReviewLimits(minimum_words=1, maximum_words=120),
+    )
+
+    assert report.status == "WARNINGS"
+    assert report.checks["varied_sentence_openings"] is False
+    assert any("REPETITIVE_SENTENCE_STARTS" in warning for warning in report.warnings)
+
+
+def test_quality_validation_warns_for_fact_list_style() -> None:
+    """Editorial validation should reject field/value metadata prose."""
+    report = validate_summary_quality(
+        "Artist: Nina Simone. Album: Pastel Blues. Genre: Jazz. Label: Philips Records.",
+        limits=ReviewLimits(minimum_words=1, maximum_words=120),
+    )
+
+    assert report.status == "WARNINGS"
+    assert report.checks["not_fact_list_style"] is False
+    assert any("FACT_LIST_STYLE" in warning for warning in report.warnings)
+
+
+def test_quality_validation_warns_for_poor_transitions() -> None:
+    """Editorial validation should detect disconnected sentence chains."""
+    report = validate_summary_quality(
+        "Pastel Blues erschien 1965 bei Philips Records. "
+        "Nina Simone sang mehrere Stücke mit sparsamer Begleitung. "
+        "Die Aufnahme verbindet Jazz, Blues und Soul. "
+        "Die Produktion bleibt trocken und konzentriert.",
+        limits=ReviewLimits(minimum_words=1, maximum_words=120),
+    )
+
+    assert report.status == "WARNINGS"
+    assert report.checks["natural_transitions"] is False
+    assert any("POOR_TRANSITIONS" in warning for warning in report.warnings)
+
+
+def test_quality_validation_warns_for_weak_opening_and_abrupt_ending() -> None:
+    """Editorial validation should detect weak article framing."""
+    report = validate_summary_quality(
+        "Das Album ist eine Jazzaufnahme. "
+        "Dabei verbindet die Sängerin kontrollierte Arrangements mit Blues. "
+        "Ende.",
+        limits=ReviewLimits(minimum_words=1, maximum_words=120),
+    )
+
+    assert report.status == "WARNINGS"
+    assert report.checks["strong_opening"] is False
+    assert report.checks["complete_closing"] is False
+    assert any("WEAK_OPENING" in warning for warning in report.warnings)
+    assert any("ABRUPT_ENDING" in warning for warning in report.warnings)
+
+
 def test_review_service_creates_and_edits_review_document() -> None:
     """ReviewService should build review documents and revalidate edits."""
     service = ReviewService(
@@ -100,6 +159,46 @@ def test_review_service_rejects_generated_placeholder_summary() -> None:
     assert "Summary contains placeholder text." in document.quality.failures
 
 
+def test_review_service_attaches_style_analysis() -> None:
+    """Review documents should include German editorial diagnostics."""
+    service = ReviewService(
+        preview_service=FakePreviewService(
+            _preview_document(
+                "Das Album zeigt eindrucksvoll eine gelungene Mischung. "
+                "Das Album verbindet Jazz und Blues. "
+                "Das Album bleibt sachlich beschrieben.",
+            )
+        ),
+        limits=ReviewLimits(minimum_words=1, maximum_words=120),
+    )
+
+    document = service.create_review(artist="Nina Simone", album="Pastel Blues")
+
+    assert document.style.llm_cliches in {"LOW", "MEDIUM", "HIGH"}
+    assert "LLM_CLICHES" in document.style.issues
+    assert "REPETITIVE_SENTENCE_OPENINGS" in document.style.issues
+
+
+def test_review_service_can_polish_generated_summary() -> None:
+    """Optional polishing should improve wording before review without adding facts."""
+    service = ReviewService(
+        preview_service=FakePreviewService(
+            _preview_document(
+                "Pastel Blues zeigt eindrucksvoll, wie Nina Simone 1965 Jazz und Blues verbindet."
+            )
+        ),
+        limits=ReviewLimits(minimum_words=1, maximum_words=120),
+        polish=True,
+    )
+
+    document = service.create_review(artist="Nina Simone", album="Pastel Blues")
+
+    assert "zeigt eindrucksvoll" not in document.proposed_summary
+    assert "Pastel Blues" in document.proposed_summary
+    assert "Nina Simone" in document.proposed_summary
+    assert "1965" in document.proposed_summary
+
+
 def test_review_renderer_outputs_required_sections() -> None:
     """ReviewRenderer should display summary, diff, and quality sections."""
     service = ReviewService(
@@ -115,6 +214,10 @@ def test_review_renderer_outputs_required_sections() -> None:
     assert "GENERATED SUMMARY" in output
     assert "UNIFIED DIFF" in output
     assert "QUALITY" in output
+    assert "EDITORIAL QUALITY" in output
+    assert "STYLE ANALYSIS" in output
+    assert "VERIFICATION SUMMARY" in output
+    assert "Sentence variation" in output
     assert "PASS" in output
 
 
@@ -162,6 +265,7 @@ def _preview_document(summary: str) -> EnrichmentPreviewDocument:
             metadata={"prompt_tokens": 100, "completion_tokens": 40},
         ),
         generation_time_seconds=0.25,
+        qa_report=QAReport(overall_score=91, quality_level=QualityLevel.VERY_GOOD),
     )
 
 

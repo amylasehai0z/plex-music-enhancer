@@ -63,12 +63,16 @@ class ApplyService:
         backup_store: BackupStore | None = None,
         audit_store: AuditStore | None = None,
         album_loader: _AlbumLoader | None = None,
+        minimum_quality_score: int | None = None,
+        force_quality: bool = False,
     ) -> None:
         """Create an apply service."""
         self._review_service = review_service
         self._backup_store = backup_store or BackupStore()
         self._audit_store = audit_store or AuditStore()
         self._album_loader = album_loader or _PlexAlbumLoader(base_url, token)
+        self._minimum_quality_score = minimum_quality_score
+        self._force_quality = force_quality
 
     def apply_album_summary(
         self,
@@ -114,13 +118,34 @@ class ApplyService:
                     "No backup was created and Plex was not modified."
                 ),
             )
+        qa_report = getattr(review.preview, "qa_report", None)
+        if (
+            self._minimum_quality_score is not None
+            and qa_report is not None
+            and qa_report.overall_score < self._minimum_quality_score
+            and not self._force_quality
+        ):
+            return self._failed_without_write(
+                review=review,
+                message=(
+                    f"Apply aborted. Minimum quality: {self._minimum_quality_score}. "
+                    f"Current quality: {qa_report.overall_score}."
+                ),
+            )
 
-        backup = self._backup_store.create_backup(review)
         context = review.preview.context
         generated = review.preview.generated_summary
         prompt = review.preview.rendered_prompt
         artist_name = context.plex.artist
         album_name = getattr(context.plex, "album", "artist")
+        try:
+            backup = self._backup_store.create_backup(review)
+        except Exception as exc:
+            return self._failed_without_write(
+                review=review,
+                message=f"Unable to create backup. Plex was not modified: {exc}",
+            )
+
         message = "Summary written and verified successfully."
         write_successful = False
         verification: VerificationResult | None = None
@@ -142,23 +167,31 @@ class ApplyService:
             if write_successful and verification is not None and verification.passed
             else "FAILED"
         )
-        audit = self._audit_store.create_record(
-            status=status,
-            artist=artist_name,
-            album=album_name,
-            rating_key=context.plex.rating_key,
-            provider=generated.provider,
-            model=generated.model,
-            prompt_name=prompt.name,
-            prompt_version=prompt.version,
-            quality_status=review.quality.status,
-            backup_path=backup.path,
-            write_successful=write_successful,
-            verification_passed=verification.passed if verification is not None else False,
-            expected_summary=review.proposed_summary,
-            verified_summary=verification.actual_summary if verification is not None else None,
-            message=message,
-        )
+        try:
+            audit = self._audit_store.create_record(
+                status=status,
+                artist=artist_name,
+                album=album_name,
+                rating_key=context.plex.rating_key,
+                provider=generated.provider,
+                model=generated.model,
+                prompt_name=prompt.name,
+                prompt_version=prompt.version,
+                quality_status=review.quality.status,
+                backup_path=backup.path,
+                write_successful=write_successful,
+                verification_passed=verification.passed if verification is not None else False,
+                expected_summary=review.proposed_summary,
+                verified_summary=verification.actual_summary if verification is not None else None,
+                message=message,
+            )
+            audit_stored = True
+        except Exception as exc:
+            audit = None
+            audit_stored = False
+            status = "FAILED"
+            message = f"{message} Audit storage failed: {exc}"
+
         return ApplyResult(
             status=status,
             artist=artist_name,
@@ -167,9 +200,9 @@ class ApplyService:
             backup_created=True,
             write_successful=write_successful,
             verification_passed=verification.passed if verification is not None else False,
-            audit_stored=True,
+            audit_stored=audit_stored,
             backup_path=backup.path,
-            audit_path=audit.path,
+            audit_path=audit.path if audit is not None else None,
             message=message,
             review=review,
             backup=backup,

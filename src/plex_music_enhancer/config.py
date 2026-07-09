@@ -4,9 +4,18 @@ from __future__ import annotations
 
 from functools import lru_cache
 from os import environ
+from pathlib import Path
 from typing import Annotated
 
-from pydantic import AnyHttpUrl, BaseModel, BeforeValidator, ConfigDict, Field, SecretStr
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,6 +65,134 @@ class AISettings(BaseModel):
     )
 
 
+class DiscogsSettings(BaseModel):
+    """Optional Discogs provider configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    token: SecretStr | None = Field(
+        default=None,
+        description="Optional Discogs personal access token.",
+    )
+    timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=60,
+        description="Timeout, in seconds, for Discogs API requests.",
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+        description="Maximum retries for transient Discogs API failures.",
+    )
+    rate_limit_seconds: float = Field(
+        default=1.0,
+        ge=0,
+        le=10,
+        description="Minimum delay between Discogs API requests.",
+    )
+
+
+class LastFMSettings(BaseModel):
+    """Optional Last.fm provider configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    api_key: SecretStr | None = Field(
+        default=None,
+        description="Optional Last.fm API key.",
+    )
+    timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=60,
+        description="Timeout, in seconds, for Last.fm API requests.",
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+        description="Maximum retries for transient Last.fm API failures.",
+    )
+    rate_limit_seconds: float = Field(
+        default=0.25,
+        ge=0,
+        le=10,
+        description="Minimum delay between Last.fm API requests.",
+    )
+
+
+class QualitySettings(BaseModel):
+    """Editorial quality assurance configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    minimum_quality_score: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Optional minimum editorial QA score required before apply.",
+    )
+
+
+class PerformanceSettings(BaseModel):
+    """Production performance and scalability configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    max_workers: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Maximum worker threads for independent provider lookups.",
+    )
+    provider_timeout: float = Field(
+        default=30.0,
+        gt=0,
+        le=300,
+        description="Default provider timeout in seconds.",
+    )
+    retry_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Default retry attempts for transient operations.",
+    )
+    cache_expiration_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        description="Default knowledge cache expiration in days.",
+    )
+    batch_size: int = Field(
+        default=100,
+        ge=1,
+        le=10000,
+        description="Preferred processing batch size for large libraries.",
+    )
+    database_location: Path = Field(
+        default=Path.home() / ".plex-enhancer" / "processing.sqlite3",
+        description="SQLite processing-state database location.",
+    )
+    quality_threshold: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Optional quality threshold used by incremental processing.",
+    )
+    incremental_mode: bool = Field(
+        default=True,
+        description="Skip albums whose metadata and generation inputs have not changed.",
+    )
+
+    @field_validator("database_location")
+    @classmethod
+    def _expand_database_location(cls, value: Path) -> Path:
+        """Expand user-home markers for database paths."""
+        return value.expanduser()
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and `.env` files."""
 
@@ -87,6 +224,10 @@ class Settings(BaseSettings):
         description="Standard Python log level.",
     )
     ai: AISettings = Field(default_factory=AISettings)
+    discogs: DiscogsSettings = Field(default_factory=DiscogsSettings)
+    lastfm: LastFMSettings = Field(default_factory=LastFMSettings)
+    quality: QualitySettings = Field(default_factory=QualitySettings)
+    performance: PerformanceSettings = Field(default_factory=PerformanceSettings)
 
     def __init__(self, **values: object) -> None:
         """Create settings with deterministic dotenv behavior during tests."""

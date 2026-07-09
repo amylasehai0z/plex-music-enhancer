@@ -11,6 +11,7 @@ from plex_music_enhancer.ai.manager import AIManager
 from plex_music_enhancer.ai.models import GeneratedSummary
 from plex_music_enhancer.enrichment.models import AlbumContext, ArtistContext
 from plex_music_enhancer.prompts.renderer import RenderedPrompt
+from plex_music_enhancer.quality import EditorialQualityEngine, QualityReport
 from plex_music_enhancer.translation import TranslationError, TranslationService
 
 
@@ -23,6 +24,7 @@ class EnrichmentPreviewDocument(BaseModel):
     rendered_prompt: RenderedPrompt
     generated_summary: GeneratedSummary
     generation_time_seconds: float = Field(ge=0)
+    qa_report: QualityReport | None = None
 
 
 class ArtistPreviewDocument(BaseModel):
@@ -34,6 +36,7 @@ class ArtistPreviewDocument(BaseModel):
     rendered_prompt: RenderedPrompt
     generated_summary: GeneratedSummary
     generation_time_seconds: float = Field(ge=0)
+    qa_report: QualityReport | None = None
 
 
 class PreviewError(Exception):
@@ -81,6 +84,7 @@ class EnrichmentPreviewService:
         *,
         pipeline: _ContextPipeline | None = None,
         ai_manager: _AIManager | None = None,
+        quality_engine: EditorialQualityEngine | None = None,
     ) -> None:
         """Create an enrichment preview service."""
         if pipeline is None:
@@ -90,6 +94,7 @@ class EnrichmentPreviewService:
 
         self._pipeline = pipeline
         self._ai_manager = ai_manager or AIManager()
+        self._quality_engine = quality_engine or EditorialQualityEngine()
 
     def preview_album(
         self,
@@ -124,6 +129,7 @@ class EnrichmentPreviewService:
             rendered_prompt=rendered_prompt,
             generated_summary=generated_summary,
             generation_time_seconds=generation_time_seconds,
+            qa_report=self._quality_engine.analyze_album(context, generated_summary.text),
         )
 
     def _preview_album_translation(
@@ -149,6 +155,10 @@ class EnrichmentPreviewService:
             rendered_prompt=document.rendered_prompt,
             generated_summary=document.generated_summary,
             generation_time_seconds=document.generation_time_seconds,
+            qa_report=self._quality_engine.analyze_album(
+                document.context,
+                document.generated_summary.text,
+            ),
         )
 
     def preview_artist(self, *, artist: str) -> ArtistPreviewDocument:
@@ -170,4 +180,5 @@ class EnrichmentPreviewService:
             rendered_prompt=rendered_prompt,
             generated_summary=generated_summary,
             generation_time_seconds=generation_time_seconds,
+            qa_report=self._quality_engine.analyze_artist(context, generated_summary.text),
         )

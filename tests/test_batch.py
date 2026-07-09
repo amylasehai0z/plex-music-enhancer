@@ -26,6 +26,8 @@ from plex_music_enhancer.enrichment import (
     WikipediaAlbumContext,
 )
 from plex_music_enhancer.prompts import RenderedPrompt
+from plex_music_enhancer.quality import QualityLevel
+from plex_music_enhancer.quality import QualityReport as QAReport
 from plex_music_enhancer.review import QualityReport, ReviewDocument
 from plex_music_enhancer.services import EnrichmentPreviewDocument
 
@@ -85,6 +87,11 @@ def test_batch_review_service_applies_and_skips(tmp_path: Path) -> None:
     assert report.skipped == 1
     assert report.failed == 0
     assert apply_service.applied_summaries == [_german_summary()]
+    assert report.average_quality_score == 88.0
+    assert report.lowest_quality_score == 88
+    assert report.highest_quality_score == 88
+    assert report.albums_below_threshold == 0
+    assert report.albums_requiring_review == 1
     assert report.job_path is not None
     assert Path(report.job_path).exists()
 
@@ -398,6 +405,10 @@ def _preview_document(*, artist: str, album: str, summary: str) -> EnrichmentPre
             metadata={},
         ),
         generation_time_seconds=0.25,
+        qa_report=QAReport(
+            overall_score=88,
+            quality_level=QualityLevel.GOOD,
+        ),
     )
 
 

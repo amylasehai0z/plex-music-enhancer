@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from tomllib import loads
 
 from pydantic import SecretStr
 from typer.testing import CliRunner
@@ -12,6 +13,7 @@ from plex_music_enhancer.ai import GeneratedSummary
 from plex_music_enhancer.ai.dummy import DUMMY_SUMMARY_TEXT
 from plex_music_enhancer.apply import ApplyResult
 from plex_music_enhancer.batch import BatchAlbumCandidate, BatchReviewOptions, BatchReviewReport
+from plex_music_enhancer.cache import CacheKind, KnowledgeCacheStore
 from plex_music_enhancer.cli import DiagnosticCheck, app
 from plex_music_enhancer.constants import __version__
 from plex_music_enhancer.enrichment import (
@@ -308,7 +310,16 @@ def test_version_command() -> None:
     result = runner.invoke(app, ["version"])
 
     assert result.exit_code == 0
-    assert __version__ in result.stdout
+    assert __version__ == "1.0.0"
+    assert result.stdout.strip() == "plex-enhancer 1.0.0"
+
+
+def test_pyproject_uses_constants_as_canonical_version_source() -> None:
+    pyproject = loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    assert pyproject["project"]["dynamic"] == ["version"]
+    assert "version" not in pyproject["project"]
+    assert pyproject["tool"]["hatch"]["version"]["path"] == ("src/plex_music_enhancer/constants.py")
 
 
 def test_root_help_includes_examples() -> None:
@@ -330,6 +341,7 @@ def test_library_help_includes_examples() -> None:
 def test_doctor_reports_missing_configuration(monkeypatch) -> None:
     monkeypatch.delenv("PLEX_ENHANCER_PLEX_URL", raising=False)
     monkeypatch.delenv("PLEX_ENHANCER_PLEX_TOKEN", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     result = runner.invoke(app, ["doctor"])
 
@@ -337,6 +349,71 @@ def test_doctor_reports_missing_configuration(monkeypatch) -> None:
     assert "Python version" in result.stdout
     assert "Configuration" in result.stdout
     assert "Plex connection" in result.stdout
+    assert "AI configured provider" in result.stdout
+    assert "dummy" in result.stdout
+    assert "AI provider availability" in result.stdout
+    assert "AI cache status" in result.stdout
+    assert "AI default prompt version" in result.stdout
+
+
+def test_doctor_warns_when_dummy_provider_uses_openai_key(monkeypatch) -> None:
+    monkeypatch.delenv("PLEX_ENHANCER_PLEX_URL", raising=False)
+    monkeypatch.delenv("PLEX_ENHANCER_PLEX_TOKEN", raising=False)
+    monkeypatch.delenv("PLEX_ENHANCER_AI__PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "AI configured provider" in result.stdout
+    assert "dummy" in result.stdout
+    assert "AI API key configured" in result.stdout
+    assert "yes" in result.stdout
+    assert "AI provider warning" in result.stdout
+    assert "An OpenAI API key is configured" in result.stdout
+    assert "ai.provider is dummy" in result.stdout
+    assert "DummyProvider" in result.stdout
+
+
+def test_doctor_reports_openai_provider_without_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("PLEX_ENHANCER_PLEX_URL", raising=False)
+    monkeypatch.delenv("PLEX_ENHANCER_PLEX_TOKEN", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("PLEX_ENHANCER_AI__PROVIDER", "openai")
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "AI configured provider" in result.stdout
+    assert "openai" in result.stdout
+    assert "AI API key configured" in result.stdout
+    assert "no" in result.stdout
+    assert "AI provider availability" in result.stdout
+    assert "OpenAI provider requires OPENAI_API_KEY" in result.stdout
+
+
+def test_cache_commands_manage_local_entries(monkeypatch, tmp_path: Path) -> None:
+    store = KnowledgeCacheStore(root=tmp_path / "cache")
+    store.write(
+        kind=CacheKind.ALBUMS,
+        source="musicbrainz",
+        key="album-key",
+        payload={"title": "Pastel Blues"},
+    )
+    monkeypatch.setattr("plex_music_enhancer.cli.KnowledgeCacheStore", lambda: store)
+
+    stats_result = runner.invoke(app, ["cache", "stats"])
+    list_result = runner.invoke(app, ["cache", "list"])
+    clear_result = runner.invoke(app, ["cache", "clear"])
+
+    assert stats_result.exit_code == 0
+    assert "Total entries" in stats_result.stdout
+    assert "1" in stats_result.stdout
+    assert list_result.exit_code == 0
+    assert "musicbrainz" in list_result.stdout
+    assert clear_result.exit_code == 0
+    assert "Removed 1 cache entry" in clear_result.stdout
+    assert store.list_entries() == []
 
 
 def test_login_saves_env_and_runs_doctor(monkeypatch, tmp_path: Path) -> None:
@@ -553,7 +630,7 @@ def test_preview_command_renders_generated_summary(monkeypatch) -> None:
     assert "dummy-v1" in result.stdout
     assert "Prompt version" in result.stdout
     assert "1.0" in result.stdout
-    assert "deterministic placeholder summary" in result.stdout
+    assert "deterministic test summary" in result.stdout
     assert "DummyProvider" in result.stdout
     assert "MUSICBRAINZ" not in result.stdout
     assert "PROMPT" not in result.stdout
@@ -578,6 +655,8 @@ def test_preview_artist_command_renders_generated_biography(monkeypatch) -> None
     assert "GENERATED BIOGRAPHY" in result.stdout
     assert "Nina Simone" in result.stdout
     assert "MUSICBRAINZ" in result.stdout
+    assert "FACT VERIFICATION" in result.stdout
+    assert "STYLE ANALYSIS" in result.stdout
 
 
 def test_preview_command_uses_translate_prompt(monkeypatch) -> None:
@@ -687,10 +766,13 @@ def test_preview_command_verbose_renders_diagnostics(monkeypatch) -> None:
     assert "PLEX" in result.stdout
     assert "MUSICBRAINZ" in result.stdout
     assert "WIKIPEDIA" in result.stdout
+    assert "FACT VERIFICATION" in result.stdout
     assert "PROMPT" in result.stdout
     assert "Current Plex summary" in result.stdout
     assert "Match confidence" in result.stdout
     assert "Article status" in result.stdout
+    assert "Release Date" in result.stdout
+    assert "Conflicts" in result.stdout
     assert "Prompt name" in result.stdout
     assert "Variables used" in result.stdout
     assert "Token usage" in result.stdout
@@ -771,7 +853,7 @@ def test_preview_command_reports_errors(monkeypatch) -> None:
     assert "secret-token" not in result.stdout
 
 
-def test_review_command_apply_reports_not_implemented(monkeypatch) -> None:
+def test_review_command_apply_uses_safe_apply_workflow(monkeypatch) -> None:
     class FakeReviewService:
         def create_review(self, *, artist: str, album: str) -> ReviewDocument:
             assert artist == "Nina Simone"
@@ -782,9 +864,31 @@ def test_review_command_apply_reports_not_implemented(monkeypatch) -> None:
             del document, edited_summary
             raise AssertionError("update_summary should not be called")
 
+    class FakeApplyService:
+        def apply_review(self, document: ReviewDocument) -> ApplyResult:
+            assert document.quality.status == "PASS"
+            return ApplyResult(
+                status="SUCCESS",
+                artist="Nina Simone",
+                album="Pastel Blues",
+                rating_key="42",
+                backup_created=True,
+                write_successful=True,
+                verification_passed=True,
+                audit_stored=True,
+                backup_path="exports/backups/backup.json",
+                audit_path="exports/audit/audit.json",
+                message="Summary written and verified successfully.",
+                review=document,
+            )
+
     monkeypatch.setattr(
         "plex_music_enhancer.cli._create_review_service",
         lambda provider_name=None, model=None: (FakeReviewService(), SecretStr("secret-token")),
+    )
+    monkeypatch.setattr(
+        "plex_music_enhancer.cli._create_apply_service_from_review",
+        lambda review_service: (FakeApplyService(), SecretStr("secret-token")),
     )
     monkeypatch.setattr("plex_music_enhancer.cli._review_choice", lambda: "A")
 
@@ -798,7 +902,8 @@ def test_review_command_apply_reports_not_implemented(monkeypatch) -> None:
     assert "GENERATED SUMMARY" in result.stdout
     assert "UNIFIED DIFF" in result.stdout
     assert "PASS" in result.stdout
-    assert "Apply workflow not implemented yet." in result.stdout
+    assert "Plex Apply Workflow" in result.stdout
+    assert "Write successful" in result.stdout
 
 
 def test_review_artist_command_prints_json(monkeypatch) -> None:
@@ -938,7 +1043,10 @@ def test_apply_command_renders_success(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "plex_music_enhancer.cli._create_apply_service",
-        lambda provider_name=None, model=None: (FakeApplyService(), SecretStr("secret-token")),
+        lambda provider_name=None, model=None, force=False: (
+            FakeApplyService(),
+            SecretStr("secret-token"),
+        ),
     )
 
     result = runner.invoke(
@@ -975,7 +1083,10 @@ def test_apply_artist_command_renders_success(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "plex_music_enhancer.cli._create_apply_service",
-        lambda provider_name=None, model=None: (FakeApplyService(), SecretStr("secret-token")),
+        lambda provider_name=None, model=None, force=False: (
+            FakeApplyService(),
+            SecretStr("secret-token"),
+        ),
     )
 
     result = runner.invoke(app, ["apply", "artist", "--artist", "Nina Simone"])
@@ -1007,7 +1118,10 @@ def test_apply_command_exits_nonzero_on_failed_verification(monkeypatch) -> None
 
     monkeypatch.setattr(
         "plex_music_enhancer.cli._create_apply_service",
-        lambda provider_name=None, model=None: (FakeApplyService(), SecretStr("secret-token")),
+        lambda provider_name=None, model=None, force=False: (
+            FakeApplyService(),
+            SecretStr("secret-token"),
+        ),
     )
 
     result = runner.invoke(
