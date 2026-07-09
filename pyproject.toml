@@ -9,7 +9,7 @@ description = "Production-grade tools for improving Plex music libraries."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
-authors = [{ name = "Plex Music Enhancer contributors" }]
+authors = [{ name = "Steinbecker Softwaredienst" }]
 keywords = ["plex", "music", "metadata", "cli"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
@@ -56,10 +56,10 @@ metadata = [
 plex-enhancer = "plex_music_enhancer.cli:app"
 
 [project.urls]
-Changelog = "https://github.com/plex-music-enhancer/plex-music-enhancer/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/plex-music-enhancer/plex-music-enhancer#readme"
-Issues = "https://github.com/plex-music-enhancer/plex-music-enhancer/issues"
-Repository = "https://github.com/plex-music-enhancer/plex-music-enhancer"
+Changelog = "https://github.com/amylasehai0z/plex-music-enhancer/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/amylasehai0z/plex-music-enhancer#readme"
+Issues = "https://github.com/amylasehai0z/plex-music-enhancer/issues"
+Repository = "https://github.com/amylasehai0z/plex-music-enhancer"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/plex_music_enhancer"]

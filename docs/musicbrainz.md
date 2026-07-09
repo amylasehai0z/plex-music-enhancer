@@ -44,7 +44,7 @@ Transient failures are retried for:
 
 The client sets a project User-Agent on all requests:
 
-`plex-music-enhancer/<version> ( https://github.com/plex-music-enhancer )`
+`plex-music-enhancer/<version> ( https://github.com/amylasehai0z/plex-music-enhancer )`
 
 ## Caching Strategy
 

@@ -12,11 +12,11 @@ lang: "de-DE"
 
 **Version 1.1**
 
-Copyright © 2026 Plex Music Enhancer contributors
+Copyright © 2026 Steinbecker Softwaredienst
 
 Lizenz: MIT License
 
-Projektseite: <https://github.com/plex-music-enhancer/plex-music-enhancer>
+Projektseite: <https://github.com/amylasehai0z/plex-music-enhancer>
 
 Erstellt am: 2026-07-09
 

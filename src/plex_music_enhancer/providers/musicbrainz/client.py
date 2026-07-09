@@ -112,4 +112,6 @@ class MusicBrainzClient:
 
 def _default_user_agent() -> str:
     """Return the project User-Agent required by MusicBrainz."""
-    return f"plex-music-enhancer/{__version__} ( https://github.com/plex-music-enhancer )"
+    return (
+        f"plex-music-enhancer/{__version__} ( https://github.com/amylasehai0z/plex-music-enhancer )"
+    )

@@ -17,13 +17,13 @@ subtitle: "Benutzerhandbuch"
 {\sffamily\fontsize{14}{18}\selectfont Version 1.1\par}
 
 \vfill
-{\sffamily\large Plex Music Enhancer contributors\par}
+{\sffamily\large Steinbecker Softwaredienst\par}
 \vspace{6mm}
 {\sffamily MIT License\par}
 \vspace{3mm}
-{\sffamily Copyright 2026 Plex Music Enhancer contributors\par}
+{\sffamily Copyright 2026 Steinbecker Softwaredienst\par}
 \vspace{3mm}
-{\sffamily \href{https://github.com/plex-music-enhancer/plex-music-enhancer}{github.com/plex-music-enhancer/plex-music-enhancer}\par}
+{\sffamily \href{https://github.com/amylasehai0z/plex-music-enhancer}{github.com/amylasehai0z/plex-music-enhancer}\par}
 \vspace{8mm}
 {\sffamily Erstellt am 9. Juli 2026\par}
 \end{titlepage}

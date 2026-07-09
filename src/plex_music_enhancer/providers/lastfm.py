@@ -373,4 +373,6 @@ def _secret_value(value: SecretStr | str | None) -> str | None:
 
 def _default_user_agent() -> str:
     """Return the default Last.fm User-Agent."""
-    return f"plex-music-enhancer/{__version__} ( https://github.com/plex-music-enhancer )"
+    return (
+        f"plex-music-enhancer/{__version__} ( https://github.com/amylasehai0z/plex-music-enhancer )"
+    )

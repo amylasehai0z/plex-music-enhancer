@@ -60,7 +60,7 @@ sudo apt install git
 ## 2.4 Repository klonen
 
 ```bash
-git clone https://github.com/plex-music-enhancer/plex-music-enhancer.git
+git clone https://github.com/amylasehai0z/plex-music-enhancer.git
 cd plex-music-enhancer
 ```
 
