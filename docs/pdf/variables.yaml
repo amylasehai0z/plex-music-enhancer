@@ -17,8 +17,6 @@ linkcolor: "PMEBlue"
 urlcolor: "PMETeal"
 toccolor: "PMEBlue"
 titlepage: true
-logo: "assets/logo/plex-music-enhancer-logo.svg"
-header-logo: "assets/logo/plex-music-enhancer-logo.svg"
 toc-depth: 3
 secnumdepth: 3
 lof: true

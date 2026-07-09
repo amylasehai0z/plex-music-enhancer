@@ -70,11 +70,7 @@ $endif$
 \displaywidowpenalty=10000
 
 \newcommand{\pmeLogo}[1][7mm]{%
-  \begin{tikzpicture}[baseline=-0.6ex, x=#1, y=#1]
-    \fill[PMETeal] (0.5,0.5) circle (0.48);
-    \fill[white] (0.38,0.25) -- (0.38,0.75) -- (0.74,0.5) -- cycle;
-    \draw[white, line width=0.05] (0.18,0.72) .. controls (0.32,0.60) and (0.45,0.60) .. (0.60,0.72);
-  \end{tikzpicture}%
+  \includegraphics[width=#1]{assets/logo/plex-music-enhancer-logo.pdf}%
 }
 
 \pagestyle{fancy}
