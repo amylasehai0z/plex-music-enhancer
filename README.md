@@ -4,6 +4,17 @@ Plex Music Enhancer is a production-grade, safe, review-first command line tool 
 
 It combines Plex library data, external music providers, a Knowledge Builder, GPT-5.5, an Editorial Style Engine, metadata verification, and a controlled Review & Apply workflow. The goal is simple: better Plex music descriptions without uncontrolled writes or invented facts.
 
+## 📘 Documentation
+
+- German User Manual (PDF) – `assets/pdf/Plex-Music-Enhancer-Handbuch.pdf`
+- Getting Started – `docs/getting-started.md`
+- Configuration – `docs/configuration.md`
+- Command Reference – `docs/commands.md`
+- AI & Editorial Pipeline – `docs/editorial.md`
+- Troubleshooting – `docs/troubleshooting.md`
+- Developer Guide – `docs/developer.md`
+- Changelog – `CHANGELOG.md`
+
 ## Highlights
 
 - GPT-5.5 generation for German music descriptions
