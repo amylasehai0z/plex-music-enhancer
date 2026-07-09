@@ -59,6 +59,23 @@ Provider dürfen keine Plex-Metadaten verändern.
 5. Tests für Erfolg und Fehlerfälle schreiben.
 6. `docs/commands.md` aktualisieren.
 
+## Web- und API-Vorbereitung
+
+Die aktuelle CLI bleibt das einzige implementierte Frontend. Neue Fachlogik soll trotzdem so
+geschrieben werden, dass spätere FastAPI- und React-Oberflächen dieselben Services verwenden
+können.
+
+- Gemeinsame request/response-Modelle liegen unter `plex_music_enhancer.contracts`.
+- Der vorbereitete Web-Bereich liegt unter `plex_music_enhancer.web`.
+- Renderer formatieren nur Ergebnisse und sollen keine fachlichen Entscheidungen treffen.
+- Services dürfen keine Typer-, Rich- oder Terminal-Abhängigkeiten benötigen.
+
+Details und Roadmap stehen in `docs/web-architecture.md`.
+
+Die interne Backend-API liegt unter `plex_music_enhancer.api`. Sie definiert
+versionierte Request-/Response-Modelle, eine gemeinsame Fehlerhierarchie und
+Service-Adapter ohne HTTP-Abhängigkeit. Details stehen in `docs/backend-api.md`.
+
 ## Prompt hinzufügen
 
 1. Markdown-Datei unter `prompts/` anlegen.
@@ -134,4 +151,3 @@ RELEASE.md
 - Providerfehler dürfen Workflows nicht unnötig abbrechen.
 - Keine Tokens oder API Keys loggen.
 - Generated Text muss reviewbar bleiben.
-

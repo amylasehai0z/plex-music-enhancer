@@ -48,6 +48,26 @@ Prüft:
 
 Best Practice: Immer zuerst ausführen, wenn etwas nicht funktioniert.
 
+## `serve`
+
+Startet die optionale Weboberfläche und das FastAPI-REST-Backend.
+
+```bash
+python -m pip install ".[web]"
+plex-enhancer serve
+```
+
+Optionen:
+
+| Option | Bedeutung |
+| --- | --- |
+| `--host TEXT` | Host-Interface, Standard `127.0.0.1` |
+| `--port INTEGER` | Port, Standard `1008`; auch über `PLEX_ENHANCER_WEB__PORT` setzbar |
+| `--reload` | Uvicorn-Reload für lokale Entwicklung |
+
+Die Weboberfläche ist anschließend unter `http://127.0.0.1:1008/` erreichbar.
+Swagger UI liegt unter `http://127.0.0.1:1008/api/v1/docs`.
+
 ## `login`
 
 Speichert Plex-URL und Plex-Token in `.env`.
@@ -57,6 +77,30 @@ plex-enhancer login
 ```
 
 Das Token wird versteckt eingegeben. Andere `.env` Variablen bleiben erhalten.
+
+## `debug`
+
+Analysiert vorhandene Prompt- und Review-Debugdateien, ohne AI erneut aufzurufen.
+
+```bash
+plex-enhancer debug prompt --stats
+plex-enhancer debug meta
+plex-enhancer debug review --summary
+plex-enhancer debug explain
+plex-enhancer debug doctor
+```
+
+Unterbefehle:
+
+| Befehl | Bedeutung |
+| --- | --- |
+| `debug prompt` | Letzten Prompt aus `/tmp/openai_prompt.txt` anzeigen |
+| `debug meta` | Prompt-Metadaten aus `/tmp/openai_prompt_meta.json` anzeigen |
+| `debug review` | Review-Log aus `/tmp/plex_review.log` anzeigen |
+| `debug explain` | Evidence-, Budget- und Coverage-Entscheidungen erklären |
+| `debug doctor` | Vollständige Developer-Diagnose mit Empfehlungen |
+
+Alle Debug-Unterbefehle unterstützen `--json`.
 
 Fehler:
 

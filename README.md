@@ -11,6 +11,10 @@ It combines Plex library data, external music providers, a Knowledge Builder, GP
 - Configuration – `docs/configuration.md`
 - Command Reference – `docs/commands.md`
 - AI & Editorial Pipeline – `docs/editorial.md`
+- Backend API – `docs/backend-api.md`
+- Web Interface – `docs/web-ui.md`
+- Web Architecture – `docs/web-architecture.md`
+- Developer Mode – `docs/developer-mode.md`
 - Troubleshooting – `docs/troubleshooting.md`
 - Developer Guide – `docs/developer.md`
 - Changelog – `CHANGELOG.md`
@@ -137,9 +141,30 @@ Preview and Review are safe and do not modify Plex. Apply writes only after revi
 Temporary developer diagnostics are written during AI review runs:
 
 - `/tmp/openai_prompt.txt` contains the exact prompt sent to OpenAI.
-- `/tmp/openai_prompt_meta.json` contains prompt length, target, provider, model and budget metadata.
+- `/tmp/openai_prompt_meta.json` contains prompt length, target, provider, model, word limits and
+  budget metadata.
 - `/tmp/plex_review.log` contains the rendered review sections, QA summary, token usage when
-  reported, generation time and command context.
+  reported, generation time, command context, prompt budget, used sources, prompt decisions,
+  prompt quality, coverage-vs-evidence analysis and prompt utilization.
+
+The debug log also explains adaptive prompt trimming. `PROMPT DECISIONS` lists included, removed and
+trimmed evidence, while `PROMPT QUALITY` reports redundancy, source balance, historical coverage and
+the prompt efficiency score. `EVIDENCE RANKING` shows which source blocks carried the strongest
+editorial value, `EVIDENCE COVERAGE` compares high-value evidence with the generated biography, and
+`EDITORIAL BALANCE` checks whether opening, career, major works, later development and legacy are
+represented. Prompt compression removes repeated claims and keeps historically useful evidence ahead
+of administrative metadata.
+
+Developer Mode exposes those files through structured commands without running
+AI again:
+
+```bash
+plex-enhancer debug prompt --stats
+plex-enhancer debug meta
+plex-enhancer debug review --summary
+plex-enhancer debug explain
+plex-enhancer debug doctor
+```
 
 ## Pipeline
 
@@ -239,6 +264,8 @@ make install
 make format
 make lint
 make test
+make web-test
+make web-build
 make pdf
 ```
 
@@ -254,6 +281,26 @@ Docker example:
 docker compose run --rm plex-music-enhancer doctor
 ```
 
+## Web Interface and REST API
+
+The optional FastAPI backend serves the React web interface and the REST API from one process:
+
+```bash
+python -m pip install ".[web]"
+plex-enhancer serve
+```
+
+The default URL is `http://127.0.0.1:1008/`. OpenAPI documentation is available at:
+
+- Swagger UI: `http://127.0.0.1:1008/api/v1/docs`
+- ReDoc: `http://127.0.0.1:1008/api/v1/redoc`
+- OpenAPI JSON: `http://127.0.0.1:1008/api/v1/openapi.json`
+
+The web UI is built with React, TypeScript, Vite, React Router, TanStack Query,
+Mantine and Monaco. It contains no business logic; every workflow calls the
+existing REST API, which reuses the same preview, review, apply, configuration
+and debug services as the CLI.
+
 ## Roadmap
 
 Current:
@@ -263,11 +310,13 @@ Current:
 - Review & Apply
 - Knowledge Builder
 - German handbook
+- Internal backend API preparation
+- FastAPI REST backend
+- React web interface
 
 Planned:
 
-- Web UI
-- Desktop application
+- Phase 6: Desktop application
 - Additional providers
 - Multi-language generation
 - Extended verification

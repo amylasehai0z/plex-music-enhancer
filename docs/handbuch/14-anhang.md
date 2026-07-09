@@ -102,3 +102,85 @@ assets/logo/plex-music-enhancer-logo.pdf
 
 Die SVG-Logo-Datei bleibt für GitHub, README und Web-Darstellung erhalten. Der
 PDF-Build nutzt keine SVG-Konvertierung und benötigt kein Inkscape.
+
+## 14.9 Backend-API und REST
+
+Plex Music Enhancer enthält eine interne Backend-API-Schicht unter
+`plex_music_enhancer.api`, eine optionale FastAPI-REST-Schicht unter
+`plex_music_enhancer.web` und eine erste React-Weboberfläche im
+Repository-Verzeichnis `web/`.
+
+Die Schicht definiert:
+
+- versionierte Request- und Response-Modelle für `v1`
+- ein zentrales `ReviewDocument`
+- Analysemodelle für Prompt, Qualität, Editorial, Verifikation und Debug-Metadaten
+- eine gemeinsame Fehlerhierarchie
+- interne Service-Adapter wie `ReviewAPIService` und `ApplyAPIService`
+- FastAPI-Router für System, Config, Provider, Logs, Review, Preview und Apply
+
+Der REST-Server wird optional installiert und gestartet:
+
+```bash
+python -m pip install ".[web]"
+plex-enhancer serve
+```
+
+Wichtige URLs:
+
+| URL | Inhalt |
+| --- | --- |
+| `http://127.0.0.1:1008/` | Weboberfläche |
+| `http://127.0.0.1:1008/api/v1/docs` | Swagger UI |
+| `http://127.0.0.1:1008/api/v1/redoc` | ReDoc |
+| `http://127.0.0.1:1008/api/v1/openapi.json` | OpenAPI JSON |
+| `/api/v1/system/health` | Health Check |
+| `/api/v1/review/artist` | Artist Review |
+| `/api/v1/review/album` | Album Review |
+| `/api/v1/preview` | Preview |
+| `/api/v1/apply` | Apply |
+
+CLI, JSON-Ausgabe und Weboberfläche arbeiten auf denselben Backend-Services. Die
+Weboberfläche enthält keine Geschäftslogik und konsumiert ausschließlich die
+REST-API.
+
+Geplante Phasen:
+
+1. Architektur und Contracts
+2. interne Backend-API
+3. FastAPI
+4. REST-Endpunkte
+5. React-Oberfläche (erste Version umgesetzt)
+6. Desktop-App
+
+## 14.10 Developer Mode
+
+Der Developer Mode hilft bei Prompt-Entwicklung, Review-Analyse und
+Qualitätsdiagnose. Er führt keine AI-Anfragen erneut aus und liest nur bereits
+vorhandene Debug-Dateien.
+
+Wichtige Dateien:
+
+| Datei | Inhalt |
+| --- | --- |
+| `/tmp/openai_prompt.txt` | letzter an OpenAI gesendeter Prompt |
+| `/tmp/openai_prompt_meta.json` | Prompt-Metadaten, Budget und Decisions |
+| `/tmp/plex_review.log` | strukturierter Review-Debug-Log |
+
+Befehle:
+
+```bash
+plex-enhancer debug prompt --stats
+plex-enhancer debug meta
+plex-enhancer debug review --summary
+plex-enhancer debug review --section coverage
+plex-enhancer debug explain
+plex-enhancer debug doctor
+```
+
+`debug explain` fasst zusammen, welche Quellen genutzt wurden, welche Evidence
+entfernt oder gekürzt wurde, wie die Prompt Efficiency aussieht und welche
+Missed Opportunities im Ergebnis sichtbar sind.
+
+Alle Developer-Mode-Befehle unterstützen `--json`, damit Debugdaten leicht in
+GitHub-Issues übernommen werden können.

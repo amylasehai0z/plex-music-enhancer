@@ -688,7 +688,7 @@ def test_artist_prompt_diagnostics_are_debug_only(caplog) -> None:
     assert "section_sizes=" in caplog.text
     assert "largest_contributors=" in caplog.text
     assert "duplicate_content=" in caplog.text
-    assert duplicate in caplog.text
+    assert "duplicate_content=[]" in caplog.text
 
 
 def test_artist_prompt_uses_focused_wikipedia_excerpt() -> None:
@@ -719,6 +719,167 @@ def test_artist_prompt_uses_focused_wikipedia_excerpt() -> None:
     assert "tour history" not in wiki
     assert "track-by-track" not in wiki
     assert "personal life details" not in wiki
+
+
+def test_artist_prompt_prioritizes_high_value_wikipedia_sentences() -> None:
+    """Wikipedia preprocessing should prefer career, works, comeback, and legacy facts."""
+    extract = " ".join(
+        [
+            "The article describes family relationships in detail.",
+            "The group formed in Stockholm in 1972.",
+            "Their breakthrough with Waterloo brought international recognition.",
+            "Mamma Mia! renewed public interest in their work.",
+            "Voyage marked a later-career reunion.",
+            "They were inducted into the Rock and Roll Hall of Fame.",
+            "A full tour chronology lists concerts city by city.",
+        ]
+    )
+    base = _artist_context()
+    context = base.model_copy(
+        update={"wikipedia": base.wikipedia.model_copy(update={"extract": extract})}
+    )
+
+    prompt = PromptBuilder().build_artist_summary_prompt(context)
+    wiki = prompt.variables["wikipedia_extract"]
+
+    assert "breakthrough with Waterloo" in wiki
+    assert "Mamma Mia!" in wiki
+    assert "Voyage" in wiki
+    assert "Rock and Roll Hall of Fame" in wiki
+    assert "tour chronology" not in wiki
+    assert "family relationships" not in wiki
+
+
+def test_artist_prompt_deduplicates_current_biography_against_wikipedia() -> None:
+    """Lower-priority Plex biography should not repeat Wikipedia narrative claims."""
+    wikipedia = "ABBA sold 400 million records worldwide. Voyage marked a reunion."
+    plex_summary = (
+        "ABBA sold 400 million records worldwide. "
+        "Voyage marked a reunion. "
+        "The group's legacy continued through stage and film revivals."
+    )
+    base = _artist_context()
+    context = base.model_copy(
+        update={
+            "wikipedia": base.wikipedia.model_copy(update={"extract": wikipedia}),
+            "plex": base.plex.model_copy(update={"summary": plex_summary}),
+        }
+    )
+
+    prompt = PromptBuilder().build_artist_summary_prompt(context)
+
+    assert prompt.rendered_text.count("400 million records") == 1
+    assert prompt.rendered_text.count("Voyage marked a reunion") == 1
+    assert "stage and film revivals" in prompt.rendered_text
+
+
+def test_artist_prompt_budget_diagnostics_include_semantic_breakdown() -> None:
+    """Prompt budget diagnostics should expose grouped source and rule contributions."""
+    prompt = PromptBuilder().build_artist_summary_prompt(_artist_context())
+
+    breakdown = prompt.budget_diagnostics["budget_breakdown"]
+
+    assert "Verified facts" in breakdown
+    assert "Wikipedia" in breakdown
+    assert "Discogs" in breakdown
+    assert "Last.fm" in breakdown
+    assert "Current biography" in breakdown
+    assert "Instructions" in breakdown
+    assert "Editorial Rules" in breakdown
+    assert "Safety Rules" in breakdown
+    assert breakdown["Wikipedia"]["estimated_tokens"] >= 0
+    assert breakdown["Wikipedia"]["percentage"] >= 0
+
+
+def test_artist_prompt_budget_diagnostics_include_evidence_decisions() -> None:
+    """Prompt diagnostics should explain evidence scores, decisions, and quality."""
+    prompt = PromptBuilder().build_artist_summary_prompt(_artist_context())
+
+    diagnostics = prompt.budget_diagnostics
+
+    assert diagnostics["evidence_scores"]
+    assert "Wikipedia" in diagnostics["evidence_scores"]
+    assert "prompt_decisions" in diagnostics
+    assert diagnostics["prompt_decisions"]["included"]
+    assert diagnostics["evidence_ranking"]
+    assert "prompt_quality" in diagnostics
+    assert diagnostics["prompt_quality"]["prompt_efficiency"] >= 0
+    assert diagnostics["prompt_quality"]["information_density"] >= 0
+
+
+def test_prompt_budget_manager_adaptively_keeps_high_value_evidence() -> None:
+    """Budget trimming should prefer historically useful evidence over filler."""
+    wiki = (
+        "A private tour chronology lists concerts city by city. " * 40
+        + "Waterloo became the breakthrough that brought international recognition. "
+        + "Dancing Queen and Mamma Mia! became internationally recognized works. "
+        + "Voyage marked a later-career reunion and renewed legacy."
+    )
+    prompt = RenderedPrompt(
+        name="artist_biography",
+        version="1.1",
+        rendered_text=f"Facts:\nVerified facts: Artist formed in 1972.\nWiki:\n{wiki}",
+        variables={
+            "additional_metadata": "Verified facts: Artist formed in 1972.",
+            "wikipedia_extract": wiki,
+        },
+        template="Facts:\n{{additional_metadata}}\nWiki:\n{{wikipedia_extract}}",
+    )
+
+    budgeted, diagnostics = PromptBudgetManager(max_characters=520).fit_with_diagnostics(prompt)
+
+    assert len(budgeted.rendered_text) <= 520
+    assert "Verified facts: Artist formed in 1972" in budgeted.rendered_text
+    assert "Waterloo" in budgeted.rendered_text
+    assert "Voyage" in budgeted.rendered_text
+    assert budgeted.rendered_text.count("tour chronology") < prompt.rendered_text.count(
+        "tour chronology"
+    )
+    assert diagnostics.prompt_decisions["trimmed"]
+
+
+def test_prompt_budget_compression_removes_semantic_duplicates_when_tight() -> None:
+    """Prompt compression should avoid keeping repeated success claims."""
+    repeated_success = "ABBA sold 400 million records worldwide. " * 20
+    high_value = "Waterloo was the breakthrough, and Voyage documented a later reunion."
+    wiki = f"{repeated_success} {high_value}"
+    prompt = RenderedPrompt(
+        name="artist_biography",
+        version="1.1",
+        rendered_text=f"Wiki:\n{wiki}",
+        variables={"wikipedia_extract": wiki},
+        template="Wiki:\n{{wikipedia_extract}}",
+    )
+
+    budgeted, diagnostics = PromptBudgetManager(max_characters=260).fit_with_diagnostics(prompt)
+
+    assert budgeted.rendered_text.count("400 million") <= 1
+    assert "Waterloo" in budgeted.rendered_text
+    assert "Voyage" in budgeted.rendered_text
+    assert diagnostics.evidence_ranking["Wikipedia"] > 0
+
+
+def test_prompt_budget_diagnostics_detect_semantic_duplicates() -> None:
+    """Semantic duplicate claims should be exposed as prompt decisions."""
+    prompt = RenderedPrompt(
+        name="artist_biography",
+        version="1.1",
+        rendered_text=(
+            "Wiki:\nABBA sold 400 million records worldwide.\n"
+            "Plex:\nABBA is one of the best-selling groups in music history."
+        ),
+        variables={
+            "wikipedia_extract": "ABBA sold 400 million records worldwide.",
+            "current_summary": "ABBA is one of the best-selling groups in music history.",
+        },
+        template="Wiki:\n{{wikipedia_extract}}\nPlex:\n{{current_summary}}",
+    )
+
+    _, diagnostics = PromptBudgetManager(max_characters=2_000).fit_with_diagnostics(prompt)
+
+    removed = "\n".join(diagnostics.prompt_decisions["removed"])
+    assert "Duplicate commercial success" in removed
+    assert diagnostics.prompt_quality["prompt_redundancy"] < 100
 
 
 def test_default_album_prompt_contains_knowledge_enrichment_sections() -> None:

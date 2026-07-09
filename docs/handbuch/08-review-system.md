@@ -143,3 +143,17 @@ bei jedem Lauf überschrieben:
 | `/tmp/openai_prompt.txt` | exakt der an OpenAI gesendete Prompt |
 | `/tmp/openai_prompt_meta.json` | Zeitstempel, Provider, Modell, Ziel, Prompt-Länge und Budgetdaten |
 | `/tmp/plex_review.log` | Review-Ausgabe, Diff, QA, Stilprüfung, Verifikation, Token-Nutzung und Kontext |
+
+Der Review-Log enthält außerdem `PROMPT BUDGET`, `USED SOURCES`, `PROMPT DECISIONS`,
+`EVIDENCE RANKING`, `PROMPT QUALITY`, `EVIDENCE COVERAGE`, `EDITORIAL BALANCE`,
+`EDITORIAL COVERAGE`, `PROMPT UTILIZATION`, `PROMPT META` und `RESPONSE META`.
+Diese Abschnitte zeigen, welche Quellen im Prompt vertreten waren, welcher Anteil des Budgets auf
+Wikipedia, Discogs, Last.fm, aktuelle Plex-Biografie, Regeln und Sicherheitsanweisungen entfiel,
+welche Evidenz adaptiv gekürzt wurde und welche vorhandenen Themen die generierte Biografie noch
+nicht genutzt hat. `PROMPT QUALITY` fasst zusätzlich Prompt-Redundanz, Quellenbalance, historische
+Abdeckung und Prompt Efficiency zusammen. `EVIDENCE RANKING` bewertet die Evidenz nach historischem
+Wert, wichtigen Werken, Karriereentwicklung, Legacy, internationaler Anerkennung, Einzigartigkeit
+und Informationsdichte. `EVIDENCE COVERAGE` zeigt, wie viel hochwertige Evidenz in der Ausgabe
+angekommen ist, während `EDITORIAL BALANCE` die erzählerische Ausgewogenheit der Biografie prüft.
+Die Prompt-Kompression entfernt bevorzugt Wiederholungen und redundante Erfolgsaussagen, bevor
+historisch relevante Informationen gekürzt werden.

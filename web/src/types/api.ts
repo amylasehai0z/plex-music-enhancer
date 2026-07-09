@@ -1,0 +1,160 @@
+export type ReviewTarget = "album" | "artist";
+export type ReviewMode = "create" | "translate" | "improve";
+
+export interface ProviderInfo {
+  name: string;
+  configured: boolean;
+  available?: boolean | null;
+  model?: string | null;
+  details: Record<string, unknown>;
+}
+
+export interface ConfigurationResponse {
+  configuration: Record<string, unknown>;
+}
+
+export interface StatisticsResponse {
+  libraries: number;
+  artists: number;
+  albums: number;
+  tracks: number;
+  cacheEntries: number;
+}
+
+export interface LogResponse {
+  path: string;
+  exists: boolean;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface LibraryArtist {
+  ratingKey: string;
+  title: string;
+  library?: string | null;
+  summaryPresent: boolean;
+  plannedAction?: string | null;
+}
+
+export interface LibraryAlbum {
+  ratingKey: string;
+  title: string;
+  artist: string;
+  library?: string | null;
+  year?: number | null;
+  summaryPresent: boolean;
+  plannedAction?: string | null;
+}
+
+export interface TokenUsage {
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+}
+
+export interface PromptAnalysis {
+  name: string;
+  version: string;
+  characters: number;
+  estimatedTokens: number;
+  budget?: number | null;
+  trimmed: boolean;
+  budgetDiagnostics: Record<string, unknown>;
+  decisions: Record<string, string[]>;
+  quality: Record<string, unknown>;
+  efficiency?: number | null;
+  utilization: Record<string, unknown>;
+  evidenceRanking: Record<string, number>;
+  evidenceCoverage: Record<string, unknown>;
+  editorialCoverage: Record<string, unknown>;
+  editorialBalance: Record<string, unknown>;
+  missedOpportunities: string[];
+}
+
+export interface QualityAnalysis {
+  status: string;
+  criticalValidation: string;
+  editorialValidation: string;
+  publishable: boolean;
+  wordCount: number;
+  checks: Record<string, boolean>;
+  warnings: string[];
+  failures: string[];
+  overallScore?: number | null;
+  overallLevel?: string | null;
+}
+
+export interface EditorialAnalysis {
+  score?: number | null;
+  level?: string | null;
+  recommendations: string[];
+  missingTopics: string[];
+  styleMetrics: Record<string, unknown>;
+  editorialMetrics: Record<string, unknown>;
+}
+
+export interface VerificationAnalysis {
+  verifiedFacts: number;
+  probableFacts: number;
+  weakFacts: number;
+  conflictingFacts: number;
+  unknownFacts: number;
+  coverageScore: number;
+  conflicts: string[];
+  missingFacts: string[];
+}
+
+export interface DebugMeta {
+  provider: string;
+  model: string;
+  generationTimeSeconds: number;
+  tokenUsage: TokenUsage;
+  sourceCount: number;
+  raw: Record<string, unknown>;
+}
+
+export interface ReviewDocument {
+  apiVersion: string;
+  target: ReviewTarget;
+  mode: ReviewMode;
+  artist: string;
+  album?: string | null;
+  ratingKey?: string | null;
+  currentSummary: string;
+  generatedSummary: string;
+  proposedSummary: string;
+  unifiedDiff: string;
+  qa: QualityAnalysis;
+  editorial: EditorialAnalysis;
+  verification: VerificationAnalysis;
+  prompt: PromptAnalysis;
+  debug: DebugMeta;
+  provider: string;
+  model: string;
+  edited: boolean;
+  plan?: Record<string, unknown> | null;
+  context: Record<string, unknown>;
+}
+
+export interface ReviewResponse {
+  document: ReviewDocument;
+  applyAllowed: boolean;
+  messages: string[];
+}
+
+export interface PreviewResponse {
+  document: ReviewDocument;
+}
+
+export interface ReviewRequest {
+  target: ReviewTarget;
+  artist: string;
+  album?: string;
+  provider?: string;
+  model?: string;
+  mode?: ReviewMode;
+}
+
+export interface ApplyRequest extends ReviewRequest {
+  force?: boolean;
+}

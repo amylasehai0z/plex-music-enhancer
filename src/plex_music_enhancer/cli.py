@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from datetime import datetime
 from json import dumps
 from os import environ
 from pathlib import Path
 from re import sub
+from shutil import which
 from typing import Annotated
 
 import typer
@@ -32,6 +34,13 @@ from plex_music_enhancer.batch import (
 from plex_music_enhancer.cache import CacheEntryInfo, CacheStats, KnowledgeCacheStore
 from plex_music_enhancer.config import AISettings, Settings
 from plex_music_enhancer.constants import CLI_NAME, MINIMUM_PYTHON_VERSION, __version__
+from plex_music_enhancer.developer import (
+    DeveloperAnalyzer,
+    DeveloperDebugRenderer,
+    PromptDebugReader,
+    PromptMetaReader,
+    ReviewLogReader,
+)
 from plex_music_enhancer.editorial import GermanEditorialStyleEngine
 from plex_music_enhancer.enrichment import (
     AlbumContext,
@@ -234,6 +243,18 @@ cache_app = typer.Typer(
     ),
 )
 app.add_typer(cache_app, name="cache")
+debug_app = typer.Typer(
+    help="Inspect prompt and review debug artifacts without running AI.",
+    epilog=(
+        "Examples:\n"
+        "  plex-enhancer debug prompt --stats\n"
+        "  plex-enhancer debug meta\n"
+        "  plex-enhancer debug review --summary\n"
+        "  plex-enhancer debug explain\n"
+        "  plex-enhancer debug doctor --json"
+    ),
+)
+app.add_typer(debug_app, name="debug")
 console = Console()
 
 
@@ -256,6 +277,46 @@ def main(
 def version() -> None:
     """Print the installed Plex Music Enhancer version."""
     console.print(f"{CLI_NAME} {__version__}")
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option("--host", help="Host interface to bind.")] = "127.0.0.1",
+    port: Annotated[
+        int,
+        typer.Option(
+            "--port",
+            min=1,
+            max=65535,
+            envvar="PLEX_ENHANCER_WEB__PORT",
+            help="Port to bind.",
+        ),
+    ] = 1008,
+    reload: Annotated[
+        bool,
+        typer.Option("--reload", help="Enable Uvicorn reload for local development."),
+    ] = False,
+) -> None:
+    """Start the optional FastAPI REST backend."""
+    try:
+        import uvicorn
+
+        from plex_music_enhancer.web.app import create_app
+    except ImportError as exc:
+        console.print(
+            "[red]FastAPI backend dependencies are not installed.[/red] "
+            'Install with: python -m pip install ".[web]"'
+        )
+        raise typer.Exit(code=1) from exc
+    try:
+        application = create_app()
+    except RuntimeError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]Starting web interface at http://{host}:{port}/[/green]")
+    console.print(f"[green]REST API docs: http://{host}:{port}/api/v1/docs[/green]")
+    uvicorn.run(application, host=host, port=port, reload=reload)
 
 
 @app.command()
@@ -1074,6 +1135,111 @@ def cache_clear() -> None:
     """Clear all local knowledge cache entries."""
     removed = KnowledgeCacheStore().clear()
     console.print(f"[green]Removed {removed} cache entr{'y' if removed == 1 else 'ies'}.[/green]")
+
+
+@debug_app.command(name="prompt")
+def debug_prompt(
+    copy: Annotated[
+        bool,
+        typer.Option("--copy", help="Copy the prompt text to the system clipboard when possible."),
+    ] = False,
+    save: Annotated[
+        Path | None,
+        typer.Option("--save", help="Save the prompt text to a file."),
+    ] = None,
+    stats: Annotated[
+        bool,
+        typer.Option("--stats", help="Show prompt character, word, token and budget statistics."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the prompt debug document as JSON."),
+    ] = False,
+) -> None:
+    """Show the last prompt sent to an AI provider."""
+    document = PromptDebugReader().read()
+    if json_output:
+        _print_json(document.to_dict())
+        return
+    if save is not None:
+        _write_text_file(save, document.content)
+    if copy:
+        _copy_to_clipboard(document.content)
+    DeveloperDebugRenderer(console).render_prompt(document, show_stats=stats)
+
+
+@debug_app.command(name="meta")
+def debug_meta(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print prompt metadata as JSON."),
+    ] = False,
+) -> None:
+    """Show structured metadata for the last prompt."""
+    document = PromptMetaReader().read()
+    if json_output:
+        _print_json(document.to_dict())
+        return
+    DeveloperDebugRenderer(console).render_meta(document)
+
+
+@debug_app.command(name="review")
+def debug_review(
+    summary: Annotated[
+        bool,
+        typer.Option("--summary", help="Show only high-signal review diagnostics."),
+    ] = False,
+    section: Annotated[
+        str | None,
+        typer.Option(
+            "--section",
+            help=(
+                "Show one review-log section, for example prompt, editorial, "
+                "verification or coverage."
+            ),
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the parsed review log as JSON."),
+    ] = False,
+) -> None:
+    """Show the last review debug log."""
+    document = ReviewLogReader().read()
+    if json_output:
+        _print_json(document.to_dict())
+        return
+    DeveloperDebugRenderer(console).render_review(document, summary=summary, section=section)
+
+
+@debug_app.command(name="explain")
+def debug_explain(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the explanation as JSON."),
+    ] = False,
+) -> None:
+    """Explain why the last generated biography looks the way it does."""
+    explanation = DeveloperAnalyzer().explain()
+    if json_output:
+        _print_json(explanation.to_dict())
+        return
+    DeveloperDebugRenderer(console).render_explanation(explanation)
+
+
+@debug_app.command(name="doctor")
+def debug_doctor(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the complete developer diagnostic report as JSON."),
+    ] = False,
+) -> None:
+    """Run a full developer-mode diagnosis of current debug artifacts."""
+    report = DeveloperAnalyzer().doctor()
+    if json_output:
+        _print_json(report.to_dict())
+        return
+    DeveloperDebugRenderer(console).render_doctor(report)
 
 
 def _run_library_review(
@@ -3128,6 +3294,59 @@ def _redact_secret(message: str, secret: str) -> str:
         return message
 
     return message.replace(secret, "REDACTED")
+
+
+def _print_json(payload: object) -> None:
+    """Print a JSON-serializable payload."""
+    console.print_json(dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+
+
+def _write_text_file(path: Path, content: str) -> None:
+    """Write text to a user-selected file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(path, content)
+    console.print(f"[green]Saved debug output to {path}[/green]")
+
+
+def _copy_to_clipboard(content: str) -> None:
+    """Copy text to the system clipboard when a supported command is available."""
+    if not content:
+        console.print("[yellow]Nothing to copy.[/yellow]")
+        return
+    command = _clipboard_command()
+    if command is None:
+        console.print("[yellow]No supported clipboard command found.[/yellow]")
+        return
+    try:
+        subprocess.run(  # noqa: S603 - fixed command chosen from known clipboard tools.
+            command,
+            input=content,
+            text=True,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        console.print("[yellow]Unable to copy prompt to the clipboard.[/yellow]")
+    else:
+        console.print("[green]Copied prompt to clipboard.[/green]")
+
+
+def _clipboard_command() -> list[str] | None:
+    """Return a platform clipboard command."""
+    if sys.platform == "darwin" and Path("/usr/bin/pbcopy").exists():
+        return ["/usr/bin/pbcopy"]
+    if sys.platform.startswith("win"):
+        return ["clip"]
+    for command in ("wl-copy", "xclip", "xsel"):
+        executable = which(command)
+        if executable:
+            if command == "xclip":
+                return [executable, "-selection", "clipboard"]
+            if command == "xsel":
+                return [executable, "--clipboard", "--input"]
+            return [executable]
+    return None
 
 
 if __name__ == "__main__":

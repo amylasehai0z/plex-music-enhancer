@@ -301,6 +301,36 @@ def test_review_debug_logger_writes_sectioned_review_log(tmp_path) -> None:
     assert "completion_tokens: 40" in output
     assert "qa_overall_score: 91" in output
     assert "editorial_level: VERY GOOD" in output
+    assert "=== PROMPT BUDGET " in output
+    assert "=== USED SOURCES " in output
+    assert "Wikipedia:" in output
+    assert "Verified metadata:" in output
+    assert "=== PROMPT DECISIONS " in output
+    assert "Included" in output
+    assert "Removed" in output
+    assert "Trimmed" in output
+    assert "=== EVIDENCE RANKING " in output
+    assert "=== PROMPT QUALITY " in output
+    assert "Prompt efficiency:" in output
+    assert "Prompt redundancy:" in output
+    assert "Information density:" in output
+    assert "=== EDITORIAL COVERAGE " in output
+    assert "Evidence available" in output
+    assert "Output coverage" in output
+    assert "Missed opportunities" in output
+    assert "=== EVIDENCE COVERAGE " in output
+    assert "High-value evidence:" in output
+    assert "Coverage:" in output
+    assert "=== EDITORIAL BALANCE " in output
+    assert "Opening:" in output
+    assert "Legacy:" in output
+    assert "Overall:" in output
+    assert "=== PROMPT UTILIZATION " in output
+    assert "Evidence used:" in output
+    assert "=== PROMPT META " in output
+    assert "name: album_summary" in output
+    assert "=== RESPONSE META " in output
+    assert "provider: openai" in output
     assert "=== PROMPT " in output
     assert document.preview.rendered_prompt.rendered_text in output
     assert "=== CURRENT SUMMARY " in output

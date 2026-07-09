@@ -1,0 +1,67 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #0f1115;
+}
+
+.topbar,
+.sidebar {
+  border-color: #252a33;
+  background: #141821;
+}
+
+.workspace {
+  background: #0f1115;
+}
+
+.surface {
+  border: 1px solid #252a33;
+  border-radius: 8px;
+  background: #151922;
+  padding: 16px;
+}
+
+.table-surface {
+  max-height: calc(100vh - 210px);
+  overflow: auto;
+}
+
+.metric-card,
+.analysis-card,
+.monaco-panel {
+  background: #151922;
+  border-color: #252a33;
+}
+
+.analysis-pre {
+  overflow: auto;
+  max-height: 180px;
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.cover-placeholder {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.3), rgba(250, 204, 21, 0.18)),
+    #222833;
+}
+
+.command-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #f4f7fb;
+  text-align: left;
+}
+
+.command-item:hover {
+  background: #202633;
+}

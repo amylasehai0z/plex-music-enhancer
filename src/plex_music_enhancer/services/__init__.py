@@ -1,5 +1,6 @@
 """Application services."""
 
+from plex_music_enhancer.services.configuration import ConfigurationService
 from plex_music_enhancer.services.enrichment import (
     AlbumMetadata,
     AlbumMetadataDocument,
@@ -19,6 +20,7 @@ __all__ = [
     "AlbumMetadata",
     "AlbumMetadataDocument",
     "ArtistPreviewDocument",
+    "ConfigurationService",
     "EnrichmentPreviewDocument",
     "EnrichmentPreviewService",
     "MatchResult",

@@ -245,6 +245,7 @@ def test_openai_provider_dumps_exact_prompt_for_debugging() -> None:
     assert metadata["target"] == "album_summary"
     assert metadata["prompt_characters"] == len(prompt.rendered_text)
     assert metadata["estimated_prompt_tokens"] > 0
+    assert "budget_diagnostics" in metadata
 
 
 def test_openai_provider_retries_transient_failures() -> None:

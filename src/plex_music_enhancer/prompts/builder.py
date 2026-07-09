@@ -28,15 +28,24 @@ ARTIST_WIKIPEDIA_KEEP_KEYWORDS = (
     "award",
     "breakthrough",
     "career",
+    "comeback",
+    "continued popularity",
+    "cultural",
     "formed",
     "formation",
     "founded",
     "genre",
+    "hall of fame",
     "historical",
     "influence",
+    "international",
     "legacy",
     "milestone",
     "musical",
+    "public interest",
+    "recognition",
+    "revival",
+    "reunion",
     "significance",
     "style",
     "auszeichnung",
@@ -51,6 +60,56 @@ ARTIST_WIKIPEDIA_KEEP_KEYWORDS = (
     "meilenstein",
     "musikalisch",
     "stil",
+    "vermächtnis",
+    "werk",
+)
+ARTIST_WIKIPEDIA_PRIORITY_KEYWORDS = (
+    "award",
+    "breakthrough",
+    "comeback",
+    "continued popularity",
+    "durchbruch",
+    "erfolg",
+    "hall of fame",
+    "influence",
+    "international",
+    "legacy",
+    "public interest",
+    "recognition",
+    "revival",
+    "reunion",
+    "vermächtnis",
+    "werk",
+)
+ARTIST_WIKIPEDIA_SECONDARY_KEYWORDS = (
+    "career",
+    "formed",
+    "formation",
+    "founded",
+    "genre",
+    "historical",
+    "milestone",
+    "musical",
+    "significance",
+    "style",
+    "karriere",
+    "musikalisch",
+)
+ARTIST_NARRATIVE_DEDUPE_MARKERS = (
+    "400 million",
+    "400 millionen",
+    "best selling",
+    "best-selling",
+    "comeback",
+    "eurovision",
+    "hall of fame",
+    "mamma mia",
+    "meistverkauft",
+    "records sold",
+    "rock and roll hall",
+    "tonträger",
+    "verkaufte",
+    "voyage",
 )
 ARTIST_CURRENT_SUMMARY_KEEP_KEYWORDS = (
     "achievement",
@@ -166,16 +225,19 @@ class PromptBuilder:
     def build_artist_summary_prompt(self, context: ArtistContext) -> RenderedPrompt:
         """Build an artist summary prompt from ArtistContext."""
         template = self._registry.get("artist_biography")
+        wikipedia_extract = _artist_wikipedia_extract(context.wikipedia.extract)
+        current_summary = _artist_current_summary(
+            context.plex.summary,
+            existing_context=[wikipedia_extract],
+        )
         variables = {
             "artist": context.plex.artist,
             "album": "",
             "genres": _first_list(context.genres, context.musicbrainz.genres, context.plex.genres)
             or ["No genres available"],
             "release_date": context.musicbrainz.begin_date or "",
-            "wikipedia_extract": _artist_wikipedia_extract(context.wikipedia.extract)
-            or "No reference extract available.",
-            "current_summary": _artist_current_summary(context.plex.summary)
-            or "No current summary.",
+            "wikipedia_extract": wikipedia_extract or "No reference extract available.",
+            "current_summary": current_summary or "No current summary.",
             "language": context.wikipedia.language or "de",
             "minimum_words": ARTIST_BIOGRAPHY_MIN_WORDS,
             "maximum_words": ARTIST_BIOGRAPHY_MAX_WORDS,
@@ -329,6 +391,21 @@ def _render_artist_structured_context(
     )
     _append_structured_list(lines, "Most notable works", _dedupe_list(context.notable_albums))
     _append_structured_list(lines, "Awards", _dedupe_list(context.awards))
+    _append_structured_value(
+        lines,
+        "Discogs unique context",
+        _unique_source_excerpt(
+            context.discogs.profile,
+            existing=[
+                context.wikipedia.extract,
+                context.plex.summary,
+                context.lastfm.biography,
+                context.lastfm.short_biography,
+            ],
+            style_only=False,
+        ),
+    )
+    _append_structured_value(lines, "Last.fm style context", _lastfm_style_context(context))
     _append_structured_list(
         lines,
         "Historical significance",
@@ -418,7 +495,7 @@ def _artist_wikipedia_extract(extract: str | None) -> str | None:
         return None
 
     sentences = _reference_sentences(extract)
-    selected = [sentence for sentence in sentences if _keep_artist_reference_sentence(sentence)]
+    selected = _prioritized_artist_reference_sentences(sentences)
     if not selected:
         selected = [
             sentence for sentence in sentences if not _drop_artist_reference_sentence(sentence)
@@ -429,12 +506,17 @@ def _artist_wikipedia_extract(extract: str | None) -> str | None:
     return _join_to_budget(selected, ARTIST_WIKIPEDIA_EXTRACT_MAX_CHARS)
 
 
-def _artist_current_summary(summary: str | None) -> str | None:
+def _artist_current_summary(
+    summary: str | None,
+    *,
+    existing_context: list[str | None] | None = None,
+) -> str | None:
     """Return a compact excerpt from the existing artist summary."""
     if not summary:
         return None
+    existing = existing_context or []
     if len(summary) <= ARTIST_CURRENT_SUMMARY_MAX_CHARS:
-        return summary
+        return _dedupe_sentences_against_existing(summary, existing)
 
     paragraphs = _reference_paragraphs(summary)
     selected = [
@@ -445,7 +527,9 @@ def _artist_current_summary(summary: str | None) -> str | None:
         selected = _fallback_current_summary_paragraphs(paragraphs)
     if has_informative_selection:
         selected = _extend_current_summary_selection(selected, paragraphs)
-    return _join_to_budget(selected, ARTIST_CURRENT_SUMMARY_EXCERPT_MAX_CHARS)
+        selected = _sort_artist_evidence(selected)
+    excerpt = _join_to_budget(selected, ARTIST_CURRENT_SUMMARY_EXCERPT_MAX_CHARS)
+    return _dedupe_sentences_against_existing(excerpt, existing)
 
 
 def _reference_paragraphs(text: str) -> list[str]:
@@ -506,9 +590,14 @@ def _extend_current_summary_selection(
 def _reference_sentences(text: str) -> list[str]:
     """Split prose into deterministic sentence-like chunks."""
     normalized = sub(r"\s+", " ", text).strip()
-    return [
-        sentence.strip() for sentence in split(r"(?<=[.!?])\s+", normalized) if sentence.strip()
-    ]
+    raw = [sentence.strip() for sentence in split(r"(?<=[.!?])\s+", normalized) if sentence.strip()]
+    sentences: list[str] = []
+    for sentence in raw:
+        if sentences and sentences[-1].endswith(("!", "?")) and len(sentences[-1].split()) <= 4:
+            sentences[-1] = f"{sentences[-1]} {sentence}"
+        else:
+            sentences.append(sentence)
+    return sentences
 
 
 def _keep_artist_reference_sentence(sentence: str) -> bool:
@@ -516,6 +605,30 @@ def _keep_artist_reference_sentence(sentence: str) -> bool:
     normalized = sentence.casefold()
     has_keep_signal = any(keyword in normalized for keyword in ARTIST_WIKIPEDIA_KEEP_KEYWORDS)
     return has_keep_signal and not _drop_artist_reference_sentence(sentence)
+
+
+def _prioritized_artist_reference_sentences(sentences: list[str]) -> list[str]:
+    """Return high-value Wikipedia sentences before lower-priority context."""
+    primary: list[str] = []
+    secondary: list[str] = []
+    fallback: list[str] = []
+    for sentence in sentences:
+        if _drop_artist_reference_sentence(sentence):
+            continue
+        normalized = sentence.casefold()
+        if any(keyword in normalized for keyword in ARTIST_WIKIPEDIA_PRIORITY_KEYWORDS):
+            primary.append(sentence)
+        elif any(keyword in normalized for keyword in ARTIST_WIKIPEDIA_SECONDARY_KEYWORDS):
+            secondary.append(sentence)
+        elif _keep_artist_reference_sentence(sentence):
+            fallback.append(sentence)
+    return _dedupe_similar_sentences(
+        [
+            *_sort_artist_evidence(primary),
+            *_sort_artist_evidence(secondary),
+            *_sort_artist_evidence(fallback),
+        ]
+    )
 
 
 def _drop_artist_reference_sentence(sentence: str) -> bool:
@@ -535,6 +648,112 @@ def _join_to_budget(sentences: list[str], max_characters: int) -> str:
         result.append(sentence)
         size = next_size
     return " ".join(result) if result else sentences[0][:max_characters].rstrip()
+
+
+def _sort_artist_evidence(sentences: list[str]) -> list[str]:
+    """Return artist evidence ordered by narrative usefulness."""
+    return sorted(
+        sentences,
+        key=lambda sentence: (-_artist_evidence_value(sentence), sentences.index(sentence)),
+    )
+
+
+def _artist_evidence_value(text: str) -> int:
+    """Score artist evidence for concise biography prompts."""
+    normalized = text.casefold()
+    score = 0
+    for keywords, weight in (
+        (ARTIST_WIKIPEDIA_PRIORITY_KEYWORDS, 12),
+        (ARTIST_CURRENT_SUMMARY_KEEP_KEYWORDS, 10),
+        (("international", "weltweit", "global", "hall of fame"), 8),
+        (("album", "single", "werk", "works"), 6),
+        (("genre", "style", "stil", "sound"), 2),
+    ):
+        score += sum(weight for keyword in keywords if keyword in normalized)
+    if any(marker in normalized for marker in ARTIST_NARRATIVE_DEDUPE_MARKERS):
+        score += 8
+    if any(char.isdigit() for char in text):
+        score += 4
+    return score
+
+
+def _dedupe_similar_sentences(sentences: list[str]) -> list[str]:
+    """Return sentences without repeated narrative claims."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for sentence in sentences:
+        key = _narrative_key(sentence)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(sentence)
+    return result
+
+
+def _dedupe_sentences_against_existing(text: str, existing: list[str | None]) -> str | None:
+    """Remove sentences whose narrative claim already exists in higher-priority sources."""
+    existing_keys = {
+        _narrative_key(sentence)
+        for source in existing
+        if source
+        for sentence in _reference_sentences(source)
+    }
+    selected = [
+        sentence
+        for sentence in _reference_sentences(text)
+        if _narrative_key(sentence) not in existing_keys
+    ]
+    return " ".join(selected) if selected else None
+
+
+def _unique_source_excerpt(
+    text: str | None,
+    *,
+    existing: list[str | None],
+    style_only: bool,
+) -> str | None:
+    """Return compact source text that is not already covered elsewhere."""
+    if not text:
+        return None
+    sentences = _reference_sentences(text)
+    if style_only:
+        sentences = [
+            sentence
+            for sentence in sentences
+            if any(
+                keyword in sentence.casefold()
+                for keyword in ("style", "genre", "sound", "musik", "stil", "pop", "rock", "jazz")
+            )
+        ]
+    unique = _dedupe_sentences_against_existing(" ".join(sentences), existing)
+    if not unique:
+        return None
+    return _join_to_budget(_reference_sentences(unique), 500)
+
+
+def _lastfm_style_context(context: ArtistContext) -> str | None:
+    """Return Last.fm style context without broad biography duplication."""
+    pieces: list[str] = []
+    if context.lastfm.tags:
+        pieces.append("Tags: " + ", ".join(_dedupe_list(context.lastfm.tags[:8])))
+    excerpt = _unique_source_excerpt(
+        context.lastfm.short_biography or context.lastfm.biography,
+        existing=[context.wikipedia.extract, context.plex.summary, context.discogs.profile],
+        style_only=True,
+    )
+    if excerpt:
+        pieces.append(excerpt)
+    return " ".join(pieces) if pieces else None
+
+
+def _narrative_key(text: str) -> str:
+    """Return a normalized key for cross-source narrative deduplication."""
+    normalized = sub(r"[^a-zA-Z0-9äöüÄÖÜß]+", " ", text.casefold())
+    for marker in ARTIST_NARRATIVE_DEDUPE_MARKERS:
+        if marker in normalized:
+            return marker
+    words = [word for word in normalized.split() if len(word) > 3]
+    return " ".join(words[:10])
 
 
 def _legacy_album_additional_metadata(context: AlbumContext) -> str:

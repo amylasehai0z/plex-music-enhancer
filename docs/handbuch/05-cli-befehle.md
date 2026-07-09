@@ -44,7 +44,27 @@ Mögliche Fehler:
 
 Best Practice: vor jeder größeren Sitzung ausführen.
 
-## 5.4 `login`
+## 5.4 `serve`
+
+Zweck: optionale Weboberfläche und FastAPI-REST-Backend starten.
+
+```bash
+python -m pip install ".[web]"
+plex-enhancer serve
+```
+
+Optionen:
+
+| Option | Bedeutung |
+| --- | --- |
+| `--host TEXT` | Host-Interface, Standard `127.0.0.1` |
+| `--port INTEGER` | Port, Standard `1008`; auch über `PLEX_ENHANCER_WEB__PORT` setzbar |
+| `--reload` | Uvicorn-Reload für lokale Entwicklung |
+
+Die Weboberfläche ist unter `http://127.0.0.1:1008/` erreichbar. Swagger UI ist
+unter `http://127.0.0.1:1008/api/v1/docs` erreichbar.
+
+## 5.5 `login`
 
 Zweck: Plex-Zugangsdaten lokal speichern.
 
@@ -57,7 +77,7 @@ Eingaben:
 - Plex Server URL
 - Plex Token
 
-## 5.5 `audit`
+## 5.6 `audit`
 
 Zweck: vorhandene Metadatenqualität prüfen.
 
@@ -72,7 +92,7 @@ Export:
 exports/audit.json
 ```
 
-## 5.6 `plan`
+## 5.7 `plan`
 
 Zweck: notwendige Aktionen für Alben planen.
 
@@ -83,7 +103,7 @@ plex-enhancer plan --library "Music" --json
 
 Aktionen: `CREATE`, `TRANSLATE`, `IMPROVE`, `REVIEW`, `SKIP`.
 
-## 5.7 `benchmark`
+## 5.8 `benchmark`
 
 Zweck: Performance einer Bibliothek prüfen.
 
@@ -92,7 +112,7 @@ plex-enhancer benchmark --library "Music"
 plex-enhancer benchmark --library "Music" --json
 ```
 
-## 5.8 `capabilities`
+## 5.9 `capabilities`
 
 Zweck: Plex-Metadatenfähigkeiten analysieren.
 
@@ -106,7 +126,7 @@ Export:
 exports/capabilities.json
 ```
 
-## 5.9 `match`
+## 5.10 `match`
 
 Zweck: MusicBrainz Release Group finden.
 
@@ -115,7 +135,7 @@ plex-enhancer match --artist "Jennifer Rush" --album "Credo"
 plex-enhancer match --artist "Jennifer Rush" --album "Credo" --json
 ```
 
-## 5.10 `scan`
+## 5.11 `scan`
 
 Zweck: Plex-Musikbibliothek lesen.
 
@@ -132,7 +152,7 @@ Exporte:
 - `exports/artists.json`
 - `exports/albums.json`
 
-## 5.11 `inspect`
+## 5.12 `inspect`
 
 Zweck: Plex-Objekte detailliert untersuchen.
 
@@ -152,7 +172,7 @@ Optionen:
 | `--json` | JSON ausgeben |
 | `--save` | JSON speichern |
 
-## 5.12 `probe write`
+## 5.13 `probe write`
 
 Zweck: Schreibfähigkeit prüfen.
 
@@ -163,7 +183,7 @@ plex-enhancer probe write --artist "Jennifer Rush" --album "Credo" --execute
 
 Ohne `--execute` wird nicht geschrieben.
 
-## 5.13 `metadata album`
+## 5.14 `metadata album`
 
 Zweck: normalisierte Album-Metadaten erzeugen.
 
@@ -173,7 +193,7 @@ plex-enhancer metadata album --artist "Jennifer Rush" --album "Credo" --json
 plex-enhancer metadata album --artist "Jennifer Rush" --album "Credo" --save
 ```
 
-## 5.14 `context album`
+## 5.15 `context album`
 
 Zweck: vollständigen AlbumContext erzeugen.
 
@@ -183,7 +203,7 @@ plex-enhancer context album --artist "Jennifer Rush" --album "Credo" --json
 plex-enhancer context album --artist "Jennifer Rush" --album "Credo" --save
 ```
 
-## 5.15 `preview`
+## 5.16 `preview`
 
 Zweck: Textvorschau erzeugen.
 
@@ -203,7 +223,7 @@ Optionen:
 | `--translate` | vorhandenen Text übersetzen |
 | `--improve` | deutschen Text verbessern |
 
-## 5.16 `preview artist`
+## 5.17 `preview artist`
 
 ```bash
 plex-enhancer preview artist --artist "Jennifer Rush"
@@ -222,7 +242,7 @@ andernfalls steht dort `No additional artist information available.`.
 Außerdem zeigt `--verbose` das Prompt-Budget, die ursprüngliche und gekürzte Promptgröße sowie die
 Beiträge der einzelnen Quellen.
 
-## 5.17 `review album`
+## 5.18 `review album`
 
 ```bash
 plex-enhancer review album --artist "Jennifer Rush" --album "Credo"
@@ -240,7 +260,7 @@ Optionen:
 
 Die ältere Form `plex-enhancer review --artist ... --album ...` bleibt weiterhin gültig.
 
-## 5.18 `review artist`
+## 5.19 `review artist`
 
 ```bash
 plex-enhancer review artist --artist "Jennifer Rush"
@@ -254,7 +274,7 @@ Während interaktiver Reviews entstehen temporäre Diagnose-Dateien:
 - `/tmp/plex_review.log` enthält Review-Ausgabe, QA, Stilprüfung, Verifikation, Token-Nutzung und
   Kontext.
 
-## 5.19 `apply`
+## 5.20 `apply`
 
 ```bash
 plex-enhancer apply --artist "Jennifer Rush" --album "Credo"
@@ -270,20 +290,20 @@ Optionen:
 - `--improve`
 - `--force`
 
-## 5.20 `apply artist`
+## 5.21 `apply artist`
 
 ```bash
 plex-enhancer apply artist --artist "Jennifer Rush"
 ```
 
-## 5.21 `batch review`
+## 5.22 `batch review`
 
 ```bash
 plex-enhancer batch review --library "Music" --missing-only --limit 25
 plex-enhancer batch review --library "Music" --resume
 ```
 
-## 5.22 `library`
+## 5.23 `library`
 
 ```bash
 plex-enhancer library plan --library "Music"
@@ -293,7 +313,7 @@ plex-enhancer library apply --library "Music"
 plex-enhancer library report --library "Music" --export-json
 ```
 
-## 5.23 `cache`
+## 5.24 `cache`
 
 ```bash
 plex-enhancer cache stats
@@ -301,7 +321,7 @@ plex-enhancer cache list
 plex-enhancer cache clear
 ```
 
-## 5.24 Fehlerbehebung bei Befehlen
+## 5.25 Fehlerbehebung bei Befehlen
 
 | Symptom | Lösung |
 | --- | --- |

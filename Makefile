@@ -1,4 +1,4 @@
-.PHONY: install format lint test coverage validate benchmark docs pdf handbook clean
+.PHONY: install format lint test coverage validate benchmark docs pdf handbook web-install web-test web-build clean
 
 install:
 	python -m pip install --upgrade pip
@@ -21,6 +21,15 @@ validate: format lint test
 benchmark:
 	plex-enhancer benchmark
 
+web-install:
+	cd web && npm install
+
+web-test:
+	cd web && npm test
+
+web-build:
+	cd web && npm run build
+
 docs:
 	./docs/pdf/build.sh
 
@@ -32,4 +41,4 @@ handbook:
 
 clean:
 	./docs/pdf/clean.sh
-	rm -rf .pytest_cache .ruff_cache .coverage htmlcov dist build
+	rm -rf .pytest_cache .ruff_cache .coverage htmlcov dist build web/node_modules

@@ -187,6 +187,34 @@ der Fehlersuche und ändern den Workflow nicht.
 | `/tmp/openai_prompt_meta.json` | Zeitstempel, Provider, Modell, Ziel, Prompt-Länge, Wortgrenzen und Budgetdaten |
 | `/tmp/plex_review.log` | Review-Ausgabe, Prompt, aktueller und generierter Text, Diff, QA, Stilprüfung, Verifikation, Token-Nutzung und Kontext |
 
+Der Review-Log enthält zusätzlich Analyseabschnitte:
+
+- `PROMPT BUDGET`: Zeichen, geschätzte Tokens und Prozentanteile für verifizierte Fakten,
+  Wikipedia, Discogs, Last.fm, aktuelle Plex-Biografie, Anweisungen, Editorial Rules und Safety
+  Rules.
+- `USED SOURCES`: zeigt, welche Quellen tatsächlich im Prompt verwendet oder ausgelassen wurden.
+- `PROMPT DECISIONS`: erklärt, welche Evidenz aufgenommen, entfernt oder gekürzt wurde. Dadurch ist
+  nachvollziehbar, warum adaptive Prompt-Kürzung eine Quelle reduziert hat.
+- `EVIDENCE RANKING`: sortiert die verwendeten Evidenzblöcke nach editorialem Wert. Hohe Werte
+  entstehen durch historische Bedeutung, wichtige Werke, Karriereentwicklung, Legacy,
+  internationale Anerkennung, Quellvertrauen, Einzigartigkeit und Informationsdichte.
+- `PROMPT QUALITY`: bewertet Prompt-Redundanz, Evidenzvielfalt, historische Abdeckung,
+  Karriereabdeckung, Legacy-Abdeckung, Quellenbalance und Prompt Efficiency.
+- `EVIDENCE COVERAGE`: misst unabhängig von der Promptgröße, wie viel hochwertige Evidenz im
+  generierten Text tatsächlich wieder auftaucht.
+- `EDITORIAL BALANCE`: prüft, ob Einleitung, musikalisches Profil, Karriere, wichtige Werke, spätere
+  Entwicklung und Vermächtnis ausgewogen vertreten sind.
+- `EDITORIAL COVERAGE`: stellt verfügbare Evidenz der tatsächlichen Ausgabe gegenüber und zeigt
+  `Missed opportunities`, wenn belegte Themen nicht genutzt wurden.
+- `PROMPT UTILIZATION`: bewertet, wie stark der generierte Text die verfügbaren Evidenzabschnitte
+  genutzt hat.
+- `PROMPT META` und `RESPONSE META`: fassen Prompt- und Antwort-Metadaten kompakt zusammen.
+
+Die adaptive Prompt-Kompression entfernt zuerst Wiederholungen, ähnliche Erfolgsaussagen und
+redundante Stilbeschreibungen. Historisch relevante Informationen wie Durchbruch, wichtige Werke,
+Comebacks, spätere Karriere und Vermächtnis werden gegenüber Aliaslisten, Verwaltungsdaten und
+ausufernden Chronologien bevorzugt.
+
 ## Best Practices
 
 - Lesen Sie jeden neuen Text beim ersten Einsatz vollständig.
