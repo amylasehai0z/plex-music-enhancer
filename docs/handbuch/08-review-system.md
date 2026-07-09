@@ -122,8 +122,24 @@ Gründe:
 
 ## 8.12 Typischer Review Workflow
 
+```bash
+plex-enhancer review album --artist "Jennifer Rush" --album "Credo" --provider openai
+plex-enhancer review artist --artist "Jennifer Rush" --provider openai
+```
+
 1. Text lesen.
 2. Diff prüfen.
 3. Qualitätswarnungen ansehen.
 4. Bei Bedarf bearbeiten.
 5. Apply nur bei plausibler Ausgabe.
+
+## 8.13 Debug-Dateien
+
+Für die Fehlersuche werden während interaktiver Reviews temporäre Dateien unter `/tmp` erzeugt und
+bei jedem Lauf überschrieben:
+
+| Datei | Inhalt |
+| --- | --- |
+| `/tmp/openai_prompt.txt` | exakt der an OpenAI gesendete Prompt |
+| `/tmp/openai_prompt_meta.json` | Zeitstempel, Provider, Modell, Ziel, Prompt-Länge und Budgetdaten |
+| `/tmp/plex_review.log` | Review-Ausgabe, Diff, QA, Stilprüfung, Verifikation, Token-Nutzung und Kontext |

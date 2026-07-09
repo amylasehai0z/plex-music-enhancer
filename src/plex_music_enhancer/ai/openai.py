@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime
+from json import dumps
 from os import environ
 from pathlib import Path
 from time import sleep
@@ -24,6 +25,7 @@ from plex_music_enhancer.prompts.renderer import RenderedPrompt
 PROVIDER_NAME = "openai"
 DEFAULT_CONFIDENCE = 0.85
 PROMPT_DEBUG_DUMP_PATH = Path("/tmp/openai_prompt.txt")  # noqa: S108 - requested debug path.
+PROMPT_DEBUG_METADATA_PATH = Path("/tmp/openai_prompt_meta.json")  # noqa: S108 - debug path.
 
 
 class OpenAIProvider(AIProvider):
@@ -96,7 +98,7 @@ class OpenAIProvider(AIProvider):
         self.validate_configuration()
         _validate_prompt(prompt, max_characters=self._settings.max_prompt_characters)
 
-        response = self._request_with_retries(prompt.rendered_text)
+        response = self._request_with_retries(prompt)
         text = _response_text(response)
         if not text:
             msg = "OpenAI returned an empty summary."
@@ -120,16 +122,22 @@ class OpenAIProvider(AIProvider):
             },
         )
 
-    def _request_with_retries(self, rendered_text: str) -> Any:
+    def _request_with_retries(self, prompt: RenderedPrompt) -> Any:
         """Call the OpenAI SDK with simple transient retry handling."""
         attempts = self._settings.max_retries + 1
         last_error: Exception | None = None
         for attempt in range(attempts):
             try:
-                _dump_prompt_for_debugging(rendered_text)
+                _dump_prompt_for_debugging(
+                    prompt,
+                    provider=self.name,
+                    model=self.model,
+                    max_prompt_characters=self._settings.max_prompt_characters,
+                    timestamp=self._clock(),
+                )
                 return self._client_instance().responses.create(
                     model=self.model,
-                    input=rendered_text,
+                    input=prompt.rendered_text,
                 )
             except Exception as exc:  # noqa: BLE001 - SDK error hierarchy is optional.
                 if not _is_transient_error(exc) or attempt == attempts - 1:
@@ -190,10 +198,55 @@ def _validate_prompt(prompt: RenderedPrompt, *, max_characters: int) -> None:
         raise AIProviderConfigurationError(msg)
 
 
-def _dump_prompt_for_debugging(rendered_text: str) -> None:
-    """Temporarily dump the exact OpenAI prompt for local debugging."""
+def _dump_prompt_for_debugging(
+    prompt: RenderedPrompt,
+    *,
+    provider: str,
+    model: str,
+    max_prompt_characters: int,
+    timestamp: datetime,
+) -> None:
+    """Temporarily dump the exact OpenAI prompt and metadata for local debugging."""
     with suppress(OSError):
-        PROMPT_DEBUG_DUMP_PATH.write_text(rendered_text, encoding="utf-8")
+        PROMPT_DEBUG_DUMP_PATH.write_text(prompt.rendered_text, encoding="utf-8")
+    with suppress(OSError):
+        PROMPT_DEBUG_METADATA_PATH.write_text(
+            dumps(
+                {
+                    "timestamp": timestamp.isoformat(),
+                    "provider": provider,
+                    "model": model,
+                    "target": prompt.name,
+                    "prompt_version": prompt.version,
+                    "prompt_characters": len(prompt.rendered_text),
+                    "estimated_prompt_tokens": _estimate_tokens(prompt.rendered_text),
+                    "max_prompt_characters": max_prompt_characters,
+                    "word_limits": _word_limits(prompt),
+                    "budget_diagnostics": prompt.budget_diagnostics,
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+
+def _estimate_tokens(text: str) -> int:
+    """Return a conservative local token estimate for debug output."""
+    return max(1, round(len(text) / 4)) if text else 0
+
+
+def _word_limits(prompt: RenderedPrompt) -> dict[str, str]:
+    """Return configured prompt word limits when present."""
+    limits: dict[str, str] = {}
+    minimum = prompt.variables.get("minimum_words")
+    maximum = prompt.variables.get("maximum_words")
+    if minimum:
+        limits["minimum_words"] = minimum
+    if maximum:
+        limits["maximum_words"] = maximum
+    return limits
 
 
 def _response_text(response: Any) -> str:

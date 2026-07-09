@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from json import loads
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -216,7 +217,9 @@ def test_openai_provider_generates_summary_from_rendered_prompt() -> None:
 def test_openai_provider_dumps_exact_prompt_for_debugging() -> None:
     """OpenAIProvider should write the exact request prompt to the temporary debug file."""
     dump_path = Path("/tmp/openai_prompt.txt")  # noqa: S108 - required debug dump path.
+    metadata_path = Path("/tmp/openai_prompt_meta.json")  # noqa: S108 - debug metadata path.
     dump_path.write_text("old prompt", encoding="utf-8")
+    metadata_path.write_text("{}", encoding="utf-8")
     client = FakeOpenAIClient(
         [
             SimpleNamespace(
@@ -236,6 +239,12 @@ def test_openai_provider_dumps_exact_prompt_for_debugging() -> None:
 
     assert client.responses.requests[0]["input"] == prompt.rendered_text
     assert dump_path.read_text(encoding="utf-8") == client.responses.requests[0]["input"]
+    metadata = loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["provider"] == "openai"
+    assert metadata["model"] == "gpt-5.5"
+    assert metadata["target"] == "album_summary"
+    assert metadata["prompt_characters"] == len(prompt.rendered_text)
+    assert metadata["estimated_prompt_tokens"] > 0
 
 
 def test_openai_provider_retries_transient_failures() -> None:

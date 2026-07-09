@@ -1121,6 +1121,17 @@ def test_review_help_lists_album_and_artist_commands() -> None:
     assert "review artist" in result.stdout
     assert "album" in result.stdout
     assert "artist" in result.stdout
+    assert "AI provider override for this review" not in result.stdout
+
+
+def test_review_album_help_shows_album_options() -> None:
+    result = runner.invoke(app, ["review", "album", "--help"])
+
+    assert result.exit_code == 0
+    assert "--artist" in result.stdout
+    assert "--album" in result.stdout
+    assert "--translate" in result.stdout
+    assert "--improve" in result.stdout
 
 
 def test_review_artist_command_prints_json(monkeypatch) -> None:

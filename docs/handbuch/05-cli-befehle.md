@@ -226,6 +226,8 @@ Beiträge der einzelnen Quellen.
 
 ```bash
 plex-enhancer review album --artist "Jennifer Rush" --album "Credo"
+plex-enhancer review album --artist "Jennifer Rush" --album "Credo" --provider openai
+plex-enhancer review album --artist "Jennifer Rush" --album "Credo" --improve
 ```
 
 Optionen:
@@ -242,7 +244,15 @@ Die ältere Form `plex-enhancer review --artist ... --album ...` bleibt weiterhi
 
 ```bash
 plex-enhancer review artist --artist "Jennifer Rush"
+plex-enhancer review artist --artist "Jennifer Rush" --provider openai
 ```
+
+Während interaktiver Reviews entstehen temporäre Diagnose-Dateien:
+
+- `/tmp/openai_prompt.txt` enthält exakt den an OpenAI gesendeten Prompt.
+- `/tmp/openai_prompt_meta.json` enthält Provider, Modell, Ziel, Prompt-Länge und Budgetdaten.
+- `/tmp/plex_review.log` enthält Review-Ausgabe, QA, Stilprüfung, Verifikation, Token-Nutzung und
+  Kontext.
 
 ## 5.19 `apply`
 

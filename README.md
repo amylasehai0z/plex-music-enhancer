@@ -120,6 +120,12 @@ plex-enhancer review album \
 ```
 
 ```bash
+plex-enhancer review artist \
+  --artist "Jennifer Rush" \
+  --provider openai
+```
+
+```bash
 plex-enhancer apply \
   --artist "Jennifer Rush" \
   --album "Credo" \
@@ -127,6 +133,13 @@ plex-enhancer apply \
 ```
 
 Preview and Review are safe and do not modify Plex. Apply writes only after review validation, backup creation and verification.
+
+Temporary developer diagnostics are written during AI review runs:
+
+- `/tmp/openai_prompt.txt` contains the exact prompt sent to OpenAI.
+- `/tmp/openai_prompt_meta.json` contains prompt length, target, provider, model and budget metadata.
+- `/tmp/plex_review.log` contains the rendered review sections, QA summary, token usage when
+  reported, generation time and command context.
 
 ## Pipeline
 

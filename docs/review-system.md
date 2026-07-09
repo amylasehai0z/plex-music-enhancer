@@ -14,7 +14,7 @@ Vor jeder Änderung sollen Sie sehen:
 ## Review starten
 
 ```bash
-plex-enhancer review --artist "Jennifer Rush" --album "Credo"
+plex-enhancer review album --artist "Jennifer Rush" --album "Credo"
 ```
 
 Für Künstler:
@@ -175,6 +175,17 @@ Nach der Anzeige fragt das Programm:
 | `Q` | Sitzung beenden |
 
 Bei `Apply` wird weiterhin Backup, Schreibvorgang, Reload-Verifikation und Audit durchgeführt.
+
+## Temporäre Debug-Dateien
+
+Während interaktiver Reviews werden lokale Diagnose-Dateien unter `/tmp` überschrieben. Sie dienen
+der Fehlersuche und ändern den Workflow nicht.
+
+| Datei | Inhalt |
+| --- | --- |
+| `/tmp/openai_prompt.txt` | exakt der an OpenAI gesendete Prompt |
+| `/tmp/openai_prompt_meta.json` | Zeitstempel, Provider, Modell, Ziel, Prompt-Länge, Wortgrenzen und Budgetdaten |
+| `/tmp/plex_review.log` | Review-Ausgabe, Prompt, aktueller und generierter Text, Diff, QA, Stilprüfung, Verifikation, Token-Nutzung und Kontext |
 
 ## Best Practices
 

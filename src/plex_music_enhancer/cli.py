@@ -99,6 +99,13 @@ from plex_music_enhancer.verification.verifier import (
 PLEX_CONFIGURATION_HELP = (
     "Run `plex-enhancer login` or set PLEX_ENHANCER_PLEX_URL and " "PLEX_ENHANCER_PLEX_TOKEN."
 )
+ARTIST_OPTION_HELP = "Artist name."
+ALBUM_OPTION_HELP = "Album title."
+AI_PROVIDER_REVIEW_HELP = "AI provider override for this review."
+AI_MODEL_REVIEW_HELP = "AI model override for this review."
+JSON_REVIEW_HELP = "Print the complete review document as JSON."
+TRANSLATE_REVIEW_HELP = "Review a German translation of the current summary."
+IMPROVE_REVIEW_HELP = "Review an improved German version of the current summary."
 
 app = typer.Typer(
     name=CLI_NAME,
@@ -554,27 +561,33 @@ def preview_artist(
 @review_app.callback()
 def review(
     ctx: typer.Context,
-    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
-    album: Annotated[str | None, typer.Option("--album", help="Album title.")] = None,
+    artist: Annotated[
+        str | None,
+        typer.Option("--artist", help=ARTIST_OPTION_HELP, hidden=True),
+    ] = None,
+    album: Annotated[
+        str | None,
+        typer.Option("--album", help=ALBUM_OPTION_HELP, hidden=True),
+    ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="AI provider override for this review."),
+        typer.Option("--provider", help=AI_PROVIDER_REVIEW_HELP, hidden=True),
     ] = None,
     model: Annotated[
         str | None,
-        typer.Option("--model", help="AI model override for this review."),
+        typer.Option("--model", help=AI_MODEL_REVIEW_HELP, hidden=True),
     ] = None,
     json_output: Annotated[
         bool,
-        typer.Option("--json", help="Print the complete review document as JSON."),
+        typer.Option("--json", help=JSON_REVIEW_HELP, hidden=True),
     ] = False,
     translate: Annotated[
         bool,
-        typer.Option("--translate", help="Review a German translation of the current summary."),
+        typer.Option("--translate", help=TRANSLATE_REVIEW_HELP, hidden=True),
     ] = False,
     improve: Annotated[
         bool,
-        typer.Option("--improve", help="Review an improved German version of the current summary."),
+        typer.Option("--improve", help=IMPROVE_REVIEW_HELP, hidden=True),
     ] = False,
 ) -> None:
     """Review generated album metadata. Prefer `review album` for new scripts."""
@@ -593,27 +606,27 @@ def review(
 
 @review_app.command(name="album")
 def review_album(
-    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
-    album: Annotated[str | None, typer.Option("--album", help="Album title.")] = None,
+    artist: Annotated[str | None, typer.Option("--artist", help=ARTIST_OPTION_HELP)] = None,
+    album: Annotated[str | None, typer.Option("--album", help=ALBUM_OPTION_HELP)] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="AI provider override for this review."),
+        typer.Option("--provider", help=AI_PROVIDER_REVIEW_HELP),
     ] = None,
     model: Annotated[
         str | None,
-        typer.Option("--model", help="AI model override for this review."),
+        typer.Option("--model", help=AI_MODEL_REVIEW_HELP),
     ] = None,
     json_output: Annotated[
         bool,
-        typer.Option("--json", help="Print the complete review document as JSON."),
+        typer.Option("--json", help=JSON_REVIEW_HELP),
     ] = False,
     translate: Annotated[
         bool,
-        typer.Option("--translate", help="Review a German translation of the current summary."),
+        typer.Option("--translate", help=TRANSLATE_REVIEW_HELP),
     ] = False,
     improve: Annotated[
         bool,
-        typer.Option("--improve", help="Review an improved German version of the current summary."),
+        typer.Option("--improve", help=IMPROVE_REVIEW_HELP),
     ] = False,
 ) -> None:
     """Review generated album metadata."""
@@ -673,18 +686,18 @@ def _review_album_workflow(
 
 @review_app.command(name="artist")
 def review_artist(
-    artist: Annotated[str | None, typer.Option("--artist", help="Artist name.")] = None,
+    artist: Annotated[str | None, typer.Option("--artist", help=ARTIST_OPTION_HELP)] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="AI provider override for this review."),
+        typer.Option("--provider", help=AI_PROVIDER_REVIEW_HELP),
     ] = None,
     model: Annotated[
         str | None,
-        typer.Option("--model", help="AI model override for this review."),
+        typer.Option("--model", help=AI_MODEL_REVIEW_HELP),
     ] = None,
     json_output: Annotated[
         bool,
-        typer.Option("--json", help="Print the complete review document as JSON."),
+        typer.Option("--json", help=JSON_REVIEW_HELP),
     ] = False,
 ) -> None:
     """Interactively review generated artist metadata and optionally apply it safely."""

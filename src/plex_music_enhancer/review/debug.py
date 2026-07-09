@@ -6,6 +6,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from io import StringIO
 from pathlib import Path
 
 from rich.console import Console
@@ -58,6 +59,9 @@ class ReviewDebugLogger:
             self._render_command_context(document, context),
             _separator(),
             "",
+            "=== DIAGNOSTICS ====================================================",
+            self._render_diagnostics(document),
+            "",
             "=== PROMPT =========================================================",
             self._prompt_text(document),
             "",
@@ -92,13 +96,41 @@ class ReviewDebugLogger:
     ) -> str:
         """Return the command context section."""
         generated = document.preview.generated_summary
+        prompt = document.preview.rendered_prompt
         values = {
+            "target": "album" if context.album else "artist",
+            "review_mode": prompt.name,
             "artist": context.artist,
             "album": context.album or "n/a",
             "provider": context.provider or generated.provider,
             "model": context.model or generated.model,
         }
         return "Command context: " + ", ".join(f"{name}={value}" for name, value in values.items())
+
+    def _render_diagnostics(self, document: ReviewDocument) -> str:
+        """Return available generation, prompt, QA, and context diagnostics."""
+        prompt = document.preview.rendered_prompt
+        generated = document.preview.generated_summary
+        metadata = generated.metadata
+        qa_report = getattr(document.preview, "qa_report", None)
+        budget = prompt.budget_diagnostics or {}
+        diagnostics = {
+            "prompt_characters": len(prompt.rendered_text),
+            "estimated_prompt_tokens": _estimate_tokens(prompt.rendered_text),
+            "response_characters": len(generated.text),
+            "response_words": len(generated.text.split()),
+            "generation_time_seconds": f"{document.preview.generation_time_seconds:.3f}",
+            "prompt_tokens": metadata.get("prompt_tokens", "not reported"),
+            "completion_tokens": metadata.get("completion_tokens", "not reported"),
+            "finish_reason": metadata.get("finish_reason", "not reported"),
+            "qa_overall_score": getattr(qa_report, "overall_score", "not available"),
+            "editorial_level": _editorial_level(qa_report),
+            "review_status": document.quality.status,
+            "publishable": document.quality.publishable,
+            "prompt_budget": budget.get("max_characters", "not reported"),
+            "prompt_trimmed_size": budget.get("final_size", "not reported"),
+        }
+        return "\n".join(f"{name}: {value}" for name, value in diagnostics.items())
 
     def _prompt_text(self, document: ReviewDocument) -> str:
         """Return the exact current prompt text, preferring the OpenAI dump when current."""
@@ -111,7 +143,12 @@ class ReviewDebugLogger:
 
     def _capture(self, render: Callable[[ReviewRenderer], None]) -> str:
         """Capture existing Rich review rendering as plain text."""
-        capture_console = Console(record=True, color_system=None, width=120)
+        capture_console = Console(
+            file=StringIO(),
+            record=True,
+            color_system=None,
+            width=120,
+        )
         renderer = ReviewRenderer(capture_console)
         render(renderer)
         text = capture_console.export_text(clear=True).strip()
@@ -127,3 +164,16 @@ def _render_quality_sections(renderer: ReviewRenderer, document: ReviewDocument)
 def _separator() -> str:
     """Return the debug log separator."""
     return "=" * 79
+
+
+def _estimate_tokens(text: str) -> int:
+    """Return a conservative local token estimate for debug output."""
+    return max(1, round(len(text) / 4)) if text else 0
+
+
+def _editorial_level(report: object | None) -> str:
+    """Return a readable editorial QA level."""
+    if report is None:
+        return "not available"
+    level = getattr(report, "overall_level", None) or getattr(report, "quality_level", None)
+    return getattr(level, "value", str(level)) if level is not None else "UNKNOWN"

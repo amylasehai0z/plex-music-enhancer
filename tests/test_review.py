@@ -285,9 +285,22 @@ def test_review_debug_logger_writes_sectioned_review_log(tmp_path) -> None:
 
     output = log_path.read_text(encoding="utf-8")
     assert "Timestamp: 2026-01-01T12:00:00+00:00" in output
-    assert "Command context: artist=Nina Simone, album=Pastel Blues" in output
+    assert "artist=Nina Simone" in output
+    assert "album=Pastel Blues" in output
     assert "provider=openai" in output
     assert "model=gpt-5.5" in output
+    assert "review_mode=album_summary" in output
+    assert "target=album" in output
+    assert "=== DIAGNOSTICS " in output
+    assert "prompt_characters:" in output
+    assert "estimated_prompt_tokens:" in output
+    assert "response_characters:" in output
+    assert "response_words:" in output
+    assert "generation_time_seconds: 0.250" in output
+    assert "prompt_tokens: 100" in output
+    assert "completion_tokens: 40" in output
+    assert "qa_overall_score: 91" in output
+    assert "editorial_level: VERY GOOD" in output
     assert "=== PROMPT " in output
     assert document.preview.rendered_prompt.rendered_text in output
     assert "=== CURRENT SUMMARY " in output

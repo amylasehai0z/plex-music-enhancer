@@ -202,6 +202,8 @@ Startet die interaktive Prüfung für ein Album.
 
 ```bash
 plex-enhancer review album --artist "Jennifer Rush" --album "Credo"
+plex-enhancer review album --artist "Jennifer Rush" --album "Credo" --provider openai
+plex-enhancer review album --artist "Jennifer Rush" --album "Credo" --improve
 ```
 
 Optionen:
@@ -227,7 +229,14 @@ Interaktive Prüfung einer Künstlerbiografie.
 
 ```bash
 plex-enhancer review artist --artist "Jennifer Rush"
+plex-enhancer review artist --artist "Jennifer Rush" --provider openai
 ```
+
+Während interaktiver Reviews werden temporäre Debug-Dateien nach `/tmp` geschrieben:
+
+- `/tmp/openai_prompt.txt`: exakt der an OpenAI gesendete Prompt
+- `/tmp/openai_prompt_meta.json`: Provider, Modell, Ziel, Prompt-Länge und Budget-Diagnostik
+- `/tmp/plex_review.log`: Review-Ausgabe, QA, Stilprüfung, Verifikation, Token-Nutzung und Kontext
 
 ## `apply`
 
