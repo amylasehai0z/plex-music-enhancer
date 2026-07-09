@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from plex_music_enhancer.review.models import QualityReport, ReviewDocument
+from plex_music_enhancer.review.policy import evaluate_review_policy
 
 
 class ReviewRenderer:
@@ -30,6 +31,7 @@ class ReviewRenderer:
         self._console.rule("UNIFIED DIFF")
         self._console.print(Panel(document.diff or "No changes.", expand=False))
         self.render_quality(document.quality)
+        self.render_policy_summary(document)
         self.render_style(document)
         self.render_editorial_quality(document)
         self.render_verification(document)
@@ -56,6 +58,19 @@ class ReviewRenderer:
             self._console.print(f"[red]{failure}[/red]")
         for warning in report.warnings:
             self._console.print(f"[yellow]{warning}[/yellow]")
+
+    def render_policy_summary(self, document: ReviewDocument) -> None:
+        """Render apply policy summary."""
+        policy = evaluate_review_policy(document)
+        table = Table(title="QUALITY SUMMARY", show_header=False)
+        table.add_column("Field", style="bold")
+        table.add_column("Value")
+        table.add_row("Critical validation", policy.critical_validation)
+        table.add_row("Editorial validation", policy.editorial_validation)
+        table.add_row("Publishable", "YES" if policy.publishable else "NO")
+        for message in policy.messages:
+            table.add_row("Message", message)
+        self._console.print(table)
 
     def render_plan(self, document: ReviewDocument) -> None:
         """Render current-summary content quality and planner recommendation."""

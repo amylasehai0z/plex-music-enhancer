@@ -86,3 +86,19 @@ docs/pdf/build.sh
 
 Es setzt Pandoc voraus und kombiniert die Kapitel in numerischer Reihenfolge.
 
+Die Ausgabedatei hat immer denselben stabilen Pfad:
+
+```text
+assets/pdf/Plex-Music-Enhancer-Handbuch.pdf
+```
+
+Versionsnummern stehen im Handbuch selbst, aber nicht im Dateinamen.
+
+Das Handbuchlogo wird aus dieser Datei geladen:
+
+```text
+assets/logo/plex-music-enhancer-logo.pdf
+```
+
+Die SVG-Logo-Datei bleibt für GitHub, README und Web-Darstellung erhalten. Der
+PDF-Build nutzt keine SVG-Konvertierung und benötigt kein Inkscape.

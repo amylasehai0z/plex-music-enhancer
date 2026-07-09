@@ -48,10 +48,29 @@ Prüft grundlegende Regeln:
 
 - nicht leer
 - Deutsch erkennbar
-- Länge im Rahmen
 - kein Markdown
 - keine Bullet-Liste
 - keine Platzhalter
+
+Diese Punkte sind kritische Validierungen. Wenn einer dieser Checks fehlschlägt, darf Apply nicht ausgeführt werden.
+
+### Quality Summary
+
+Die Review-Ausgabe unterscheidet drei Zustände:
+
+| Feld | Bedeutung |
+| --- | --- |
+| Critical validation | harte Sicherheits- und Faktenregeln |
+| Editorial validation | redaktionelle Qualität und Stil |
+| Publishable | ob Apply erlaubt ist |
+
+Mögliche Ergebnisse:
+
+| Status | Bedeutung |
+| --- | --- |
+| `PASS` | keine kritischen Fehler und keine redaktionellen Warnungen |
+| `WARNINGS` | Apply ist erlaubt, aber stilistische Verbesserungen werden empfohlen |
+| `FAILED` | Apply ist blockiert |
 
 ### Style Analysis
 
@@ -87,6 +106,46 @@ Der Score liegt zwischen `0` und `100`.
 | unter 70 | problematisch |
 
 Eine konfigurierte Mindestschwelle kann Apply blockieren.
+
+Ab v1.0.1 gilt zusätzlich: Apply ist erlaubt, wenn alle kritischen Validierungen bestehen und der redaktionelle Gesamtscore mindestens `85` beträgt oder das Qualitätslevel `GOOD`, `VERY GOOD` oder `EXCELLENT` ist. Wenn nur redaktionelle Warnungen vorhanden sind, gilt der Text als publizierbar.
+
+Wenn der redaktionelle Score zu niedrig ist, erscheint:
+
+```text
+Generated summary does not yet meet the required editorial quality.
+```
+
+## Kritische Validierung und Empfehlungen
+
+Kritische Fehler blockieren Apply immer:
+
+- leerer Text
+- nicht deutsch erkannter Text
+- Platzhaltertext
+- Markdown
+- Bullet-Listen
+- faktische Konflikte
+- zu niedriges Verifikationsvertrauen
+
+Redaktionelle Empfehlungen blockieren Apply nicht:
+
+- schwacher Einstieg
+- fehlende Übergänge
+- wiederholte Satzanfänge
+- Lesbarkeitshinweise
+- passive Sprache
+- lexikalische Vielfalt
+- Satzlänge
+
+Wenn nur solche Warnungen vorliegen, zeigt der Review-Apply-Schritt:
+
+```text
+Editorial warnings detected.
+The generated summary is considered publishable.
+You may still Apply this summary.
+
+Continue? [Y/n]
+```
 
 ## Platzhaltererkennung
 

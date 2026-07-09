@@ -19,20 +19,33 @@ Geprüft werden:
 
 - nicht leer
 - Deutsch erkennbar
-- Länge im Zielbereich
 - kein Markdown
 - keine Bullet-Listen
 - keine offenen Template- oder Testtexte
 
-## 8.3 Language Detection
+Diese Punkte sind kritische Validierungen. Sie blockieren Apply.
+
+## 8.3 Quality Summary
+
+Die Review-Ausgabe zeigt zusätzlich:
+
+| Feld | Bedeutung |
+| --- | --- |
+| Critical validation | harte Regeln zu Sprache, Leertext, Format und Fakten |
+| Editorial validation | redaktionelle Qualität und Stil |
+| Publishable | ob der Text angewendet werden darf |
+
+`PASS` bedeutet, dass keine Probleme gefunden wurden. `WARNINGS` bedeutet, dass Apply erlaubt ist, aber stilistische Verbesserungen möglich sind. `FAILED` bedeutet, dass Apply blockiert wird.
+
+## 8.4 Language Detection
 
 Die Spracherkennung ist eine Heuristik. Sie prüft typische deutsche Wörter und Zeichen.
 
-## 8.4 Length Validation
+## 8.5 Length Validation
 
 Zu kurze Texte enthalten meist zu wenig Kontext. Zu lange Texte passen schlecht in Plex und wirken schnell überladen.
 
-## 8.5 Editorial Validation
+## 8.6 Editorial Validation
 
 Die Editorial-Prüfung achtet auf:
 
@@ -42,7 +55,34 @@ Die Editorial-Prüfung achtet auf:
 - abruptes Ende
 - Listenstil
 
-## 8.6 Diff Viewer
+Diese Hinweise sind Empfehlungen. Sie blockieren Apply nicht, wenn der Text insgesamt publizierbar ist.
+
+## 8.7 Apply-Policy
+
+Apply ist erlaubt, wenn:
+
+- alle kritischen Validierungen bestehen
+- keine faktischen Konflikte vorliegen
+- das Verifikationsvertrauen ausreichend ist
+- der redaktionelle Score mindestens 85 beträgt oder das Qualitätslevel `GOOD`, `VERY GOOD` oder `EXCELLENT` ist
+
+Wenn nur redaktionelle Warnungen vorhanden sind, zeigt das Programm:
+
+```text
+Editorial warnings detected.
+The generated summary is considered publishable.
+You may still Apply this summary.
+
+Continue? [Y/n]
+```
+
+Wenn der Score zu niedrig ist, wird Apply mit dieser Meldung blockiert:
+
+```text
+Generated summary does not yet meet the required editorial quality.
+```
+
+## 8.8 Diff Viewer
 
 Der Diff zeigt Unterschiede:
 
@@ -51,7 +91,7 @@ Der Diff zeigt Unterschiede:
 + neuer Text
 ```
 
-## 8.7 Approval Process
+## 8.9 Approval Process
 
 ```text
 [A] Apply  [E] Edit  [S] Skip  [Q] Quit
@@ -64,11 +104,11 @@ Der Diff zeigt Unterschiede:
 | `S` | überspringen |
 | `Q` | beenden |
 
-## 8.8 Manuelle Bearbeitung
+## 8.10 Manuelle Bearbeitung
 
 Bei `E` öffnet sich der konfigurierte Terminaleditor. Nach dem Speichern wird erneut geprüft.
 
-## 8.9 Warum Summaries scheitern können
+## 8.11 Warum Summaries scheitern können
 
 Gründe:
 
@@ -80,11 +120,10 @@ Gründe:
 - schwacher Stil
 - unklare Faktenlage
 
-## 8.10 Typischer Review Workflow
+## 8.12 Typischer Review Workflow
 
 1. Text lesen.
 2. Diff prüfen.
 3. Qualitätswarnungen ansehen.
 4. Bei Bedarf bearbeiten.
 5. Apply nur bei plausibler Ausgabe.
-

@@ -147,12 +147,12 @@ def test_apply_service_blocks_below_configured_qa_score(tmp_path: Path) -> None:
 
     assert result.status == "FAILED"
     assert result.backup_created is False
-    assert "Minimum quality: 90" in result.message
+    assert "Generated summary does not yet meet the required editorial quality." in result.message
     assert album.calls == []
 
 
 def test_apply_service_force_overrides_qa_threshold(tmp_path: Path) -> None:
-    """Force should allow an explicitly approved low-QA write."""
+    """Force should not override the hard v1.0.1 publishability floor."""
     album = FakeAlbum(summary="Aktuelle Plex-Zusammenfassung.")
     service = _apply_service(
         tmp_path=tmp_path,
@@ -164,8 +164,26 @@ def test_apply_service_force_overrides_qa_threshold(tmp_path: Path) -> None:
 
     result = service.apply_album_summary(artist="Nina Simone", album="Pastel Blues")
 
+    assert result.status == "FAILED"
+    assert result.backup_created is False
+    assert "Generated summary does not yet meet the required editorial quality." in result.message
+
+
+def test_apply_service_allows_editorial_warnings_with_high_score(tmp_path: Path) -> None:
+    """Editorial warnings should not block a high-scoring publishable summary."""
+    album = FakeAlbum(summary="Aktuelle Plex-Zusammenfassung.")
+    service = _apply_service(
+        tmp_path=tmp_path,
+        album=album,
+        quality_status="WARNINGS",
+        qa_score=91,
+    )
+
+    result = service.apply_album_summary(artist="Nina Simone", album="Pastel Blues")
+
     assert result.status == "SUCCESS"
     assert result.backup_created is True
+    assert album.calls == ["batchEdits", "editSummary", "saveEdits", "reload"]
 
 
 def test_backup_store_creates_backup_file(tmp_path: Path) -> None:
@@ -313,24 +331,28 @@ def _apply_service(
 
 def _review_document(*, status: str = "PASS", qa_score: int | None = None) -> ReviewDocument:
     """Return a review document fixture."""
+    proposed_summary = _german_summary() if status != "FAILED" else ""
     return ReviewDocument(
         preview=_preview_document(qa_score=qa_score),
         current_summary="Aktuelle Plex-Zusammenfassung.",
-        proposed_summary=_german_summary() if status == "PASS" else "",
+        proposed_summary=proposed_summary,
         diff="--- current summary\n+++ generated summary\n",
         quality=QualityReport(
             status=status,  # type: ignore[arg-type]
             checks={
-                "not_empty": status == "PASS",
-                "language_is_german": status == "PASS",
-                "length_in_range": status == "PASS",
+                "not_empty": status != "FAILED",
+                "language_is_german": status != "FAILED",
+                "length_in_range": status != "WARNINGS",
                 "no_markdown": True,
                 "no_bullet_lists": True,
                 "no_placeholder_text": True,
+                "strong_opening": status != "WARNINGS",
+                "natural_transitions": True,
+                "varied_sentence_openings": True,
             },
-            warnings=[],
-            failures=[] if status == "PASS" else ["Summary is empty."],
-            word_count=90 if status == "PASS" else 0,
+            warnings=[] if status == "PASS" else ["WEAK_OPENING: Summary opens weakly."],
+            failures=["Summary is empty."] if status == "FAILED" else [],
+            word_count=90 if status != "FAILED" else 0,
         ),
     )
 

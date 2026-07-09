@@ -1,412 +1,243 @@
 # Plex Music Enhancer
 
-Plex Music Enhancer is a production-grade command line application for auditing, planning, generating, reviewing and safely applying high-quality German music metadata to Plex music libraries.
+Plex Music Enhancer is a production-grade, safe, review-first command line tool for improving Plex music metadata with AI-assisted, metadata-driven German album and artist descriptions.
 
-It combines authoritative metadata providers with GPT-5.5 and a deterministic editorial pipeline to produce fact-based, natural sounding album descriptions while keeping the user in complete control before anything is written back to Plex.
+It combines Plex library data, external music providers, a Knowledge Builder, GPT-5.5, an Editorial Style Engine, metadata verification, and a controlled Review & Apply workflow. The goal is simple: better Plex music descriptions without uncontrolled writes or invented facts.
 
----
+## Highlights
 
-## Quick Links
-
-- 📘 **German User Manual (PDF)** – `assets/pdf/Plex-Music-Enhancer-Handbuch-v1.1.pdf`
-- 🚀 Getting Started – `docs/getting-started.md`
-- ⚙️ Configuration – `docs/configuration.md`
-- 🤖 AI & Editorial Pipeline – `docs/editorial.md`
-- 📚 Command Reference – `docs/commands.md`
-- 🔍 Troubleshooting – `docs/troubleshooting.md`
-- 📋 Changelog – `CHANGELOG.md`
-
----
-
-# Features
-
-- Modern Typer CLI with Rich user interface
-- Read-only planning before any modification
-- Interactive review workflow
-- Safe Apply process including backup and verification
-- GPT-5.5 powered German editorial generation
-- Editorial Style Engine
-- Editorial Quality Engine
-- Metadata verification engine
-- MusicBrainz integration
-- Wikipedia integration
-- Discogs integration
-- Last.fm integration
-- Provider cache
-- Incremental processing
-- Batch processing
-- Full library workflow
-- Complete audit trail
-- Export and reporting
+- GPT-5.5 generation for German music descriptions
+- Editorial Style Engine and Editorial Quality Engine
+- Metadata Verification Engine
+- Knowledge Builder and Context Builder
+- MusicBrainz, Wikipedia, Discogs and Last.fm metadata
+- Safe Apply workflow with automatic backup, reload verification and audit trail
+- Provider cache for faster repeated runs
+- Batch processing and full library workflow
 - Docker support
 - GitHub Actions
 - Extensive automated test suite
 
----
-
-# Requirements
+## Requirements
 
 - Python 3.12+
 - Plex Media Server
-- Plex Token
-- OpenAI API Key (optional)
-- Internet connection for metadata providers
+- Plex token
+- OpenAI API key for GPT-5.5 generation
+- Optional API credentials for Discogs and Last.fm
 
----
-
-# Installation
-
-Create a virtual environment
+## Installation
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-```
 
-Install dependencies
-
-```bash
 python -m pip install --upgrade pip
 python -m pip install ".[dev,ai,metadata]"
+
+plex-enhancer login
+plex-enhancer doctor
 ```
 
-Run the interactive configuration
+On Windows, activate the virtual environment with:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+## Configuration
+
+Plex credentials can be configured interactively:
 
 ```bash
 plex-enhancer login
 ```
 
-Verify your installation
-
-```bash
-plex-enhancer doctor
-```
-
----
-
-# Configuration
-
-Example environment variables
+Example environment configuration:
 
 ```bash
 PLEX_ENHANCER_PLEX_URL=http://localhost:32400
-PLEX_ENHANCER_PLEX_TOKEN=your-token
+PLEX_ENHANCER_PLEX_TOKEN=your-plex-token
 
 PLEX_ENHANCER_AI__PROVIDER=openai
 PLEX_ENHANCER_AI__MODEL=gpt-5.5
-
 OPENAI_API_KEY=sk-...
 ```
 
-Optional metadata providers
+Optional provider configuration:
 
 ```bash
 PLEX_ENHANCER_DISCOGS__TOKEN=...
 PLEX_ENHANCER_LASTFM__API_KEY=...
 ```
 
-Performance options
+## Workflow
 
-```bash
-PLEX_ENHANCER_PERFORMANCE__MAX_WORKERS=4
-PLEX_ENHANCER_PERFORMANCE__INCREMENTAL_MODE=true
-```
-
----
-
-# Supported Metadata Providers
-
-| Provider | Purpose |
-|-----------|---------|
-| Plex | Read existing metadata and write approved summaries |
-| MusicBrainz | Artist and release identification |
-| Wikipedia | Encyclopedic context |
-| Discogs | Producers, labels, credits and release information |
-| Last.fm | Artist biographies and community information |
-| OpenAI | AI text generation |
-| Dummy | Local testing provider |
-
----
-
-# Safe First Run
-
-```bash
-plex-enhancer doctor
-
-plex-enhancer scan --export-json
-
-plex-enhancer audit --export-json
-
-plex-enhancer library plan --library "Music"
-```
-
-These commands never modify Plex.
-
----
-
-# Typical Workflow
-
-Preview metadata
+The standard workflow is Preview, Review, Apply.
 
 ```bash
 plex-enhancer preview \
-    --artist "Jennifer Rush" \
-    --album "Credo"
+  --artist "Jennifer Rush" \
+  --album "Credo" \
+  --provider openai
 ```
-
-Review
 
 ```bash
 plex-enhancer review \
-    --artist "Jennifer Rush" \
-    --album "Credo"
+  --artist "Jennifer Rush" \
+  --album "Credo" \
+  --provider openai
 ```
-
-Apply
 
 ```bash
 plex-enhancer apply \
-    --artist "Jennifer Rush" \
-    --album "Credo"
+  --artist "Jennifer Rush" \
+  --album "Credo" \
+  --provider openai
 ```
 
----
+Preview and Review are safe and do not modify Plex. Apply writes only after review validation, backup creation and verification.
 
-# AI Editorial Pipeline
+## Pipeline
 
-```
+```text
 Plex
-    │
-    ▼
+↓
 Metadata Collection
-    │
-    ▼
+↓
 MusicBrainz
-    │
-    ▼
+↓
 Wikipedia
-    │
-    ▼
+↓
 Discogs
-    │
-    ▼
+↓
 Last.fm
-    │
-    ▼
+↓
 Context Builder
-    │
-    ▼
+↓
 Knowledge Builder
-    │
-    ▼
+↓
 Editorial Style Engine
-    │
-    ▼
+↓
 GPT-5.5
-    │
-    ▼
+↓
 Editorial Quality Engine
-    │
-    ▼
+↓
+Verification Engine
+↓
 Review
-    │
-    ▼
+↓
 Apply
 ```
 
-The pipeline is designed to minimize hallucinations by grounding generation in verified metadata whenever possible.
+Generation is grounded in collected and verified metadata. The prompt pipeline is designed to prefer supported facts, avoid unsupported claims, and keep the user in control before Plex is changed.
 
----
+## Safety Model
 
-# Safety Model
+Read-only commands include:
 
-## Read-only commands
+- `doctor`
+- `scan`
+- `audit`
+- `plan`
+- `match`
+- `metadata`
+- `context`
+- `preview`
+- `review` until Apply is confirmed
+- `library plan`
+- `library review`
+- `cache stats`
+- `cache list`
 
-- doctor
-- audit
-- scan
-- plan
-- metadata
-- context
-- preview
-- review (until Apply is confirmed)
-- library plan
-- library review
+Write-capable commands include:
 
-## Write commands
+- `apply`
+- `review` after explicit Apply confirmation
+- `library apply`
+- `cache clear`
 
-- apply
-- library apply
-- review (after confirmation)
+Before writing metadata to Plex, the Apply workflow creates a backup, writes the approved summary, reloads the Plex object, verifies the stored text and records an audit trail.
 
-Before every write operation Plex Music Enhancer
+## German User Manual
 
-- creates a backup
-- writes metadata
-- reloads the album
-- verifies the result
-- stores an audit record
+The complete German user manual is available as a PDF:
 
----
+```text
+assets/pdf/Plex-Music-Enhancer-Handbuch.pdf
+```
 
-# Documentation
-
-## 📘 German User Manual
-
-A complete German handbook is available as PDF.
-
-**Download**
-
-- `assets/pdf/Plex-Music-Enhancer-Handbuch-v1.0.pdf`
-
-The handbook covers
+The handbook covers:
 
 - Installation
 - Configuration
-- Every CLI command
-- Complete workflows
-- AI pipeline
-- Editorial Style Engine
-- Review System
+- CLI reference
+- Workflows
+- Editorial Engine
 - Providers
 - Cache
+- Performance
 - Troubleshooting
 - FAQ
 - Glossary
 
-The PDF is also available in the GitHub Releases section.
-
----
-
-## Technical Documentation
-
-- Architecture
-- Getting Started
-- Configuration
-- Commands
-- Editorial Engine
-- AI Generation
-- Review System
-- Cache
-- Performance
-- Verification
-- Developer Guide
-- Release Notes
-- Changelog
-
----
-
-# Troubleshooting
-
-First run
+The handbook is regenerated with every `make pdf` run and is attached to GitHub Releases under the same stable filename:
 
 ```bash
-plex-enhancer doctor
+make pdf
 ```
 
-If OpenAI is not used
+The PDF build uses `assets/logo/plex-music-enhancer-logo.pdf` for LaTeX output. SVG logo assets are used for GitHub, README and web contexts.
 
-- verify `OPENAI_API_KEY`
-- verify provider selection
-
-If metadata is incomplete
-
-- verify provider configuration
-- clear provider cache
-
-If Apply fails
-
-- inspect Review warnings
-- inspect Quality checks
-
----
-
-# Development
-
-Install developer dependencies
+## Development
 
 ```bash
 make install
-```
-
-Formatting
-
-```bash
 make format
-```
-
-Lint
-
-```bash
 make lint
-```
-
-Tests
-
-```bash
 make test
+make pdf
 ```
 
-Install pre-commit hooks
+Install pre-commit hooks:
 
 ```bash
 pre-commit install
 ```
 
----
-
-# Docker
+Docker example:
 
 ```bash
 docker compose run --rm plex-music-enhancer doctor
 ```
 
----
+## Roadmap
 
-# Roadmap
+Current:
 
-Current release
+- Stable metadata generation
+- Editorial pipeline
+- Review & Apply
+- Knowledge Builder
+- German handbook
 
-- ✅ Version 1.0
-
-Planned
+Planned:
 
 - Web UI
-- Native desktop application
-- Additional metadata providers
+- Desktop application
+- Additional providers
 - Multi-language generation
 - Extended verification
 - Plugin ecosystem
 
----
+## Contributing
 
-# Contributing
+Contributions, bug reports and documentation improvements are welcome. See `CONTRIBUTING.md` before opening pull requests.
 
-Contributions, feature requests and bug reports are welcome.
+## License
 
-Please read
+MIT License. See `LICENSE`.
 
-- CONTRIBUTING.md
+## Acknowledgements
 
-before submitting pull requests.
-
----
-
-# License
-
-MIT License
-
----
-
-# Acknowledgements
-
-This project builds upon the excellent work of
-
-- Plex
-- MusicBrainz
-- Wikipedia
-- Discogs
-- Last.fm
-- OpenAI
-- Typer
-- Rich
+Plex Music Enhancer builds on Plex, MusicBrainz, Wikipedia, Discogs, Last.fm, OpenAI, Typer, Rich, Pydantic and httpx.

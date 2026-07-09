@@ -69,7 +69,13 @@ from plex_music_enhancer.plex import (
     PlexWriteProbe,
 )
 from plex_music_enhancer.prompts import PromptRegistry
-from plex_music_enhancer.review import ReviewDocument, ReviewError, ReviewRenderer, ReviewService
+from plex_music_enhancer.review import (
+    ReviewDocument,
+    ReviewError,
+    ReviewRenderer,
+    ReviewService,
+    evaluate_review_policy,
+)
 from plex_music_enhancer.services import (
     AlbumMetadataDocument,
     ArtistPreviewDocument,
@@ -1440,6 +1446,7 @@ def _create_apply_service(
             base_url=plex_url,
             token=plex_token,
             minimum_quality_score=settings.quality.minimum_quality_score,
+            verification_confidence_threshold=settings.quality.verification_confidence_threshold,
             force_quality=force,
         ),
         token,
@@ -1457,6 +1464,7 @@ def _create_apply_service_from_review(
             base_url=plex_url,
             token=plex_token,
             minimum_quality_score=settings.quality.minimum_quality_score,
+            verification_confidence_threshold=settings.quality.verification_confidence_threshold,
         ),
         plex_token,
     )
@@ -1471,11 +1479,13 @@ def _create_batch_review_service(
     plex_url, plex_token = _require_plex_configuration()
 
     review_service, token = _create_review_service(provider_name=provider_name, model=model)
+    settings = Settings()
     apply_service = ApplyService(
         review_service=review_service,
         base_url=plex_url,
         token=plex_token,
-        minimum_quality_score=Settings().quality.minimum_quality_score,
+        minimum_quality_score=settings.quality.minimum_quality_score,
+        verification_confidence_threshold=settings.quality.verification_confidence_threshold,
     )
     batch_service = BatchReviewService(
         album_source=PlexBatchAlbumSource(plex_url, plex_token),
@@ -1494,11 +1504,13 @@ def _create_library_workflow_service(
     plex_url, plex_token = _require_plex_configuration()
 
     review_service, token = _create_review_service(provider_name=provider_name, model=model)
+    settings = Settings()
     apply_service = ApplyService(
         review_service=review_service,
         base_url=plex_url,
         token=plex_token,
-        minimum_quality_score=Settings().quality.minimum_quality_score,
+        minimum_quality_score=settings.quality.minimum_quality_score,
+        verification_confidence_threshold=settings.quality.verification_confidence_threshold,
     )
     workflow_service = LibraryWorkflowService(
         album_source=PlexBatchAlbumSource(plex_url, plex_token),
@@ -1875,6 +1887,10 @@ def _render_apply_result(result: ApplyResult) -> None:
     table.add_column("Status")
     table.add_column("Details")
     table.add_row("Status", _format_apply_status(result.status), result.message)
+    policy = evaluate_review_policy(result.review)
+    table.add_row("Critical validation", policy.critical_validation, "")
+    table.add_row("Editorial validation", policy.editorial_validation, "")
+    table.add_row("Publishable", "YES" if policy.publishable else "NO", "")
     table.add_row(
         "Backup created",
         _yes_no_plain(result.backup_created),
@@ -1892,6 +1908,9 @@ def _render_apply_result(result: ApplyResult) -> None:
     table.add_row("Audit log", result.audit_path or "", "")
     console.print(table)
 
+    if policy.editorial_validation == "WARNINGS" and policy.publishable:
+        console.print("[yellow]Editorial warnings detected.[/yellow]")
+        console.print("The generated summary is considered publishable.")
     if result.status != "SUCCESS":
         console.print(f"[red]{result.message}[/red]")
 
@@ -2496,9 +2515,18 @@ def _run_review_loop(service: ReviewService, document: ReviewDocument) -> None:
     while True:
         choice = _review_choice()
         if choice == "A":
-            if document.quality.status != "PASS":
+            policy = evaluate_review_policy(document)
+            if not policy.apply_allowed:
+                for message in [*policy.critical_failures, *policy.messages]:
+                    console.print(f"[red]{message}[/red]")
                 console.print("[red]Generated summary must pass validation before Apply.[/red]")
                 continue
+            if policy.editorial_validation == "WARNINGS":
+                console.print("[yellow]Editorial warnings detected.[/yellow]")
+                console.print("The generated summary is considered publishable.")
+                console.print("You may still Apply this summary.")
+                if not typer.confirm("Continue?", default=True):
+                    continue
 
             apply_service, _ = _create_apply_service_from_review(service)
             result = apply_service.apply_review(document)

@@ -85,7 +85,7 @@ docs/pdf/build.sh
 Die Ausgabedatei heißt:
 
 ```text
-docs/pdf/output/Plex-Music-Enhancer-Handbuch-v1.1.pdf
+assets/pdf/Plex-Music-Enhancer-Handbuch.pdf
 ```
 
 Build-Artefakte lassen sich entfernen mit:
@@ -104,3 +104,8 @@ make clean
 ```
 
 Wenn der Build fehlschlägt, prüfen Sie zuerst, ob `pandoc` und `xelatex` im Terminal verfügbar sind. Das Skript meldet fehlende Kapitel, fehlende Werkzeuge und nicht erzeugte Ausgabedateien mit verständlichen Fehlermeldungen.
+
+Das Handbuch lädt sein Logo aus `assets/logo/plex-music-enhancer-logo.pdf`.
+Die SVG-Datei ist für GitHub, README und Web-Assets gedacht. Für den
+LaTeX-Handbuchbuild wird keine SVG-Konvertierung verwendet; Inkscape, das
+LaTeX-Paket `svg` und `includesvg` sind nicht erforderlich.

@@ -359,18 +359,14 @@ class FakeMutablePlexObject:
 
 def _german_summary() -> str:
     """Return deterministic German prose."""
-    words = [
-        "Die",
-        "Kuenstlerin",
-        "ist",
-        "eine",
-        "sachliche",
-        "Beschreibung",
-        "mit",
-        "verifizierbaren",
-        "Angaben",
-        "und",
-        "neutraler",
-        "Sprache",
-    ]
-    return " ".join(words[index % len(words)] for index in range(90)) + "."
+    return (
+        "Nina Simone, geboren 1933 als Eunice Waymon und gestorben 2003, war eine "
+        "US-amerikanische Musikerin, deren Werk Jazz, Soul, Blues und klassische "
+        "Einflüsse miteinander verband. Zwischen 1954 und 2003 entwickelte sie einen "
+        "präzisen Vocal-Jazz-Stil, der Gesang und Klavier eng aufeinander bezog. "
+        "Zugleich wurde sie durch eindringliche Interpretationen und politisch bewusste "
+        "Lieder bekannt, die ihre künstlerische Entwicklung mit der Bürgerrechtsbewegung "
+        "verbanden. Dadurch gilt ihre Laufbahn als wichtiger Bezugspunkt für die "
+        "Geschichte afroamerikanischer Populärmusik, ohne sich auf ein einzelnes Genre "
+        "reduzieren zu lassen."
+    )

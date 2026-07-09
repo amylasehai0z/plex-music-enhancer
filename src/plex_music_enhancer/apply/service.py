@@ -15,7 +15,7 @@ from plex_music_enhancer.apply.verification import (
     verify_album_summary,
     write_album_summary,
 )
-from plex_music_enhancer.review import ReviewDocument, ReviewService
+from plex_music_enhancer.review import ReviewDocument, ReviewService, evaluate_review_policy
 
 
 class ApplyError(Exception):
@@ -64,6 +64,7 @@ class ApplyService:
         audit_store: AuditStore | None = None,
         album_loader: _AlbumLoader | None = None,
         minimum_quality_score: int | None = None,
+        verification_confidence_threshold: float = 0.7,
         force_quality: bool = False,
     ) -> None:
         """Create an apply service."""
@@ -72,6 +73,7 @@ class ApplyService:
         self._audit_store = audit_store or AuditStore()
         self._album_loader = album_loader or _PlexAlbumLoader(base_url, token)
         self._minimum_quality_score = minimum_quality_score
+        self._verification_confidence_threshold = verification_confidence_threshold
         self._force_quality = force_quality
 
     def apply_album_summary(
@@ -110,13 +112,20 @@ class ApplyService:
 
     def apply_review(self, review: ReviewDocument) -> ApplyResult:
         """Apply an already-reviewed summary without regenerating it."""
-        if review.quality.status != "PASS":
+        policy = evaluate_review_policy(
+            review,
+            editorial_score_threshold=85,
+            verification_confidence_threshold=self._verification_confidence_threshold,
+        )
+        if not policy.apply_allowed:
+            message = (
+                policy.messages[0]
+                if policy.messages
+                else "Generated summary did not pass critical validation."
+            )
             return self._failed_without_write(
                 review=review,
-                message=(
-                    "Generated summary did not pass quality validation. "
-                    "No backup was created and Plex was not modified."
-                ),
+                message=(f"{message} No backup was created and Plex was not modified."),
             )
         qa_report = getattr(review.preview, "qa_report", None)
         if (

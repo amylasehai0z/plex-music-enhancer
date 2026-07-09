@@ -147,7 +147,7 @@ def validate_summary_quality(summary: str, *, limits: ReviewLimits | None = None
     if not checks["no_placeholder_text"]:
         failures.append("Summary contains placeholder text.")
     if not checks["language_is_german"]:
-        warnings.append("Summary does not appear to be German.")
+        failures.append("Summary does not appear to be German.")
     if not checks["length_in_range"]:
         warnings.append(
             "Summary length is outside the configured range "
@@ -173,6 +173,9 @@ def validate_summary_quality(summary: str, *, limits: ReviewLimits | None = None
 
     return QualityReport(
         status=status,
+        critical_validation="FAIL" if failures else "PASS",
+        editorial_validation="WARNINGS" if warnings else ("FAIL" if failures else "PASS"),
+        publishable=not failures,
         checks=checks,
         warnings=warnings,
         failures=failures,
@@ -192,7 +195,6 @@ def _looks_german(text: str) -> bool:
         " mit ",
         " ein ",
         " eine ",
-        " album ",
     ]
     return any(marker in lowered for marker in markers) or any(char in text for char in "äöüÄÖÜß")
 

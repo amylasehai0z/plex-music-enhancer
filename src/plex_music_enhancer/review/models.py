@@ -28,6 +28,9 @@ class QualityReport(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     status: QualityStatus
+    critical_validation: str = "PASS"
+    editorial_validation: str = "PASS"
+    publishable: bool = True
     checks: dict[str, bool] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     failures: list[str] = Field(default_factory=list)

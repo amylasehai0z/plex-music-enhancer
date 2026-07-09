@@ -4,15 +4,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOCS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ROOT_DIR="$(cd "${DOCS_DIR}/.." && pwd)"
-OUTPUT_DIR="${SCRIPT_DIR}/output"
+OUTPUT_DIR="${ROOT_DIR}/assets/pdf"
 BUILD_DIR="${SCRIPT_DIR}/.build"
-OUTPUT="${OUTPUT_DIR}/Plex-Music-Enhancer-Handbuch-v1.1.pdf"
+OUTPUT="${OUTPUT_DIR}/Plex-Music-Enhancer-Handbuch.pdf"
 TITLE_PAGE="${SCRIPT_DIR}/titlepage.md"
 METADATA_FILE="${SCRIPT_DIR}/metadata.yaml"
 VARIABLES_FILE="${SCRIPT_DIR}/variables.yaml"
 TEMPLATE_FILE="${SCRIPT_DIR}/eisvogel.tex"
 RESOLVED_VARIABLES_FILE="${BUILD_DIR}/resolved-variables.yaml"
 HANDBOOK_DIR="${DOCS_DIR}/handbuch"
+LOGO_FILE="${ROOT_DIR}/assets/logo/plex-music-enhancer-logo.pdf"
 
 CHAPTERS=(
   "00-titel.md"
@@ -110,6 +111,7 @@ verify_file "$TITLE_PAGE"
 verify_file "$METADATA_FILE"
 verify_file "$VARIABLES_FILE"
 verify_file "$TEMPLATE_FILE"
+verify_file "$LOGO_FILE"
 
 INPUT_FILES=("$TITLE_PAGE")
 for chapter in "${CHAPTERS[@]}"; do
@@ -164,5 +166,6 @@ fi
 
 log "PDF erfolgreich erstellt"
 printf 'Datei: %s\n' "$OUTPUT"
+printf 'Logo: %s\n' "$LOGO_FILE"
 printf 'Kapitel: %s\n' "${#CHAPTERS[@]}"
 printf 'Format: A4, XeLaTeX, klickbares Inhaltsverzeichnis, Kopf- und Fusszeilen\n'
