@@ -8,7 +8,7 @@ It combines authoritative metadata providers with GPT-5.5 and a deterministic ed
 
 ## Quick Links
 
-- 📘 **German User Manual (PDF)** – `assets/pdf/Plex-Music-Enhancer-Handbuch-v1.0.pdf`
+- 📘 **German User Manual (PDF)** – `assets/pdf/Plex-Music-Enhancer-Handbuch-v1.1.pdf`
 - 🚀 Getting Started – `docs/getting-started.md`
 - ⚙️ Configuration – `docs/configuration.md`
 - 🤖 AI & Editorial Pipeline – `docs/editorial.md`
