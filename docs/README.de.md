@@ -1,4 +1,4 @@
-# Plex Music Enhancer v1.0
+# Plex Music Enhancer v1.1
 
 **Plex Music Enhancer** ist ein Werkzeug für Plex-Musikbibliotheken. Es hilft dabei, fehlende oder schwache Album- und Künstlerbeschreibungen auf Deutsch zu erzeugen, zu prüfen und sicher nach Plex zu übernehmen.
 
@@ -70,7 +70,13 @@ plex-enhancer doctor
 
 ## PDF-Handbuch
 
-Die PDF-Konfiguration liegt unter [docs/pdf](pdf/). Wenn Pandoc installiert ist, kann das Handbuch mit folgendem Befehl erzeugt werden:
+Die PDF-Konfiguration liegt unter [docs/pdf](pdf/). Das Publishing-System erzeugt ein professionell gesetztes A4-Handbuch mit Pandoc und XeLaTeX.
+
+Voraussetzungen:
+
+- Pandoc
+- Eine TeX-Distribution mit `xelatex`, zum Beispiel MacTeX oder TeX Live
+- Optional: Noto Serif, Noto Sans und JetBrains Mono
 
 ```bash
 docs/pdf/build.sh
@@ -79,6 +85,22 @@ docs/pdf/build.sh
 Die Ausgabedatei heißt:
 
 ```text
-docs/pdf/Plex-Music-Enhancer-Handbuch-v1.0.pdf
+docs/pdf/output/Plex-Music-Enhancer-Handbuch-v1.1.pdf
 ```
 
+Build-Artefakte lassen sich entfernen mit:
+
+```bash
+docs/pdf/clean.sh
+```
+
+Alternativ stehen Makefile-Ziele bereit:
+
+```bash
+make docs
+make pdf
+make handbook
+make clean
+```
+
+Wenn der Build fehlschlägt, prüfen Sie zuerst, ob `pandoc` und `xelatex` im Terminal verfügbar sind. Das Skript meldet fehlende Kapitel, fehlende Werkzeuge und nicht erzeugte Ausgabedateien mit verständlichen Fehlermeldungen.

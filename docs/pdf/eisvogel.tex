@@ -1,0 +1,182 @@
+\documentclass[$fontsize$,$papersize$,$for(classoption)$$classoption$$sep$,$endfor$]{$documentclass$}
+
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setmainlanguage{german}
+$if(mainfont)$
+\setmainfont{$mainfont$}
+$endif$
+$if(sansfont)$
+\setsansfont{$sansfont$}
+$endif$
+$if(monofont)$
+\setmonofont{$monofont$}[Scale=MatchLowercase]
+$endif$
+
+\usepackage{geometry}
+\geometry{$for(geometry)$$geometry$$sep$,$endfor$}
+\usepackage{xcolor}
+\definecolor{PMEBlue}{HTML}{1F4E79}
+\definecolor{PMETeal}{HTML}{197278}
+\definecolor{PMELightBlue}{HTML}{EAF3F8}
+\definecolor{PMELightGray}{HTML}{F5F7FA}
+\definecolor{PMEGray}{HTML}{5F6B76}
+\definecolor{PMEWarning}{HTML}{FFF4D6}
+\definecolor{PMEDanger}{HTML}{FDECEC}
+\definecolor{PMESuccess}{HTML}{EAF7EA}
+
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{calc}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{colortbl}
+\usepackage{makecell}
+\usepackage{caption}
+\captionsetup{labelfont=bf,font=small}
+\newcounter{none}
+\usepackage{microtype}
+\usepackage{setspace}
+\setstretch{1.08}
+\usepackage{needspace}
+\usepackage{fancyhdr}
+\usepackage{emptypage}
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{tocloft}
+\usepackage{makeidx}
+\makeindex
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{fvextra}
+\usepackage{etoolbox}
+\usepackage{hyperref}
+\hypersetup{
+  pdftitle={$title$},
+  pdfauthor={$author$},
+  pdfsubject={$subject$},
+  pdfkeywords={$for(keywords)$$keywords$$sep$, $endfor$},
+  pdfcreator={$creator$},
+  colorlinks=true,
+  linkcolor=PMEBlue,
+  urlcolor=PMETeal,
+  citecolor=PMEBlue
+}
+
+\widowpenalty=10000
+\clubpenalty=10000
+\displaywidowpenalty=10000
+
+\newcommand{\pmeLogo}[1][7mm]{%
+  \begin{tikzpicture}[baseline=-0.6ex, x=#1, y=#1]
+    \fill[PMETeal] (0.5,0.5) circle (0.48);
+    \fill[white] (0.38,0.25) -- (0.38,0.75) -- (0.74,0.5) -- cycle;
+    \draw[white, line width=0.05] (0.18,0.72) .. controls (0.32,0.60) and (0.45,0.60) .. (0.60,0.72);
+  \end{tikzpicture}%
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\pmeLogo[5mm]\hspace{3pt}\small\sffamily Plex Music Enhancer}
+\fancyhead[R]{\small\sffamily\nouppercase{\rightmark}}
+\fancyfoot[C]{\small\sffamily\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\small\sffamily\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+\titleformat{\chapter}[display]
+  {\sffamily\bfseries\Huge\color{PMEBlue}}
+  {\chaptertitlename\ \thechapter}
+  {12pt}
+  {\Huge}
+  [\vspace{8pt}\titlerule]
+
+\titleformat{\section}
+  {\Needspace{6\baselineskip}\sffamily\bfseries\Large\color{PMEBlue}}
+  {\thesection}
+  {0.8em}
+  {}
+
+\titleformat{\subsection}
+  {\Needspace{5\baselineskip}\sffamily\bfseries\large\color{PMETeal}}
+  {\thesubsection}
+  {0.8em}
+  {}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\setlength{\LTpre}{6pt}
+\setlength{\LTpost}{10pt}
+\renewcommand{\arraystretch}{1.22}
+\rowcolors{2}{PMELightGray}{white}
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}%
+}
+
+\lstdefinestyle{pme}{
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  frame=single,
+  rulecolor=\color{PMEBlue},
+  backgroundcolor=\color{PMELightGray},
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  framesep=6pt,
+  framerule=0.5pt,
+  showstringspaces=false,
+  tabsize=2
+}
+\lstset{style=pme}
+
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+  breaklines,
+  breakanywhere,
+  commandchars=\\\{\},
+  fontsize=\small
+}
+
+\newtcolorbox{pmebox}[2]{
+  enhanced,
+  breakable,
+  colback=#1,
+  colframe=PMEBlue,
+  coltitle=black,
+  title=\sffamily\bfseries #2,
+  fonttitle=\sffamily\bfseries,
+  left=8pt,
+  right=8pt,
+  top=7pt,
+  bottom=7pt,
+  arc=2pt,
+  boxrule=0.6pt
+}
+
+\newenvironment{note}{\begin{pmebox}{PMELightBlue}{NOTE}}{\end{pmebox}}
+\newenvironment{tip}{\begin{pmebox}{PMESuccess}{TIP}}{\end{pmebox}}
+\newenvironment{important}{\begin{pmebox}{PMELightBlue}{IMPORTANT}}{\end{pmebox}}
+\newenvironment{warning}{\begin{pmebox}{PMEWarning}{WARNING}}{\end{pmebox}}
+\newenvironment{caution}{\begin{pmebox}{PMEDanger}{CAUTION}}{\end{pmebox}}
+
+$highlighting-macros$
+
+$if(csl-refs)$
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newenvironment{CSLReferences}[2]{}{}
+$endif$
+
+\begin{document}
+
+$body$
+
+\end{document}

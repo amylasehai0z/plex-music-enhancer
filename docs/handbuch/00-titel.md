@@ -1,7 +1,7 @@
 ---
 title: "Plex Music Enhancer"
 subtitle: "Benutzerhandbuch"
-version: "1.0"
+version: "1.1"
 date: "2026-07-09"
 lang: "de-DE"
 ---
@@ -10,7 +10,7 @@ lang: "de-DE"
 
 ## Benutzerhandbuch
 
-**Version 1.0**
+**Version 1.1**
 
 Copyright © 2026 Plex Music Enhancer contributors
 
@@ -22,7 +22,7 @@ Erstellt am: 2026-07-09
 
 ## Über dieses Handbuch
 
-Dieses Handbuch beschreibt die Benutzung von Plex Music Enhancer v1.0. Es richtet sich an Anwenderinnen und Anwender, die ihre Plex-Musikbibliothek kontrolliert mit besseren deutschen Album- und Künstlertexten pflegen möchten.
+Dieses Handbuch beschreibt die Benutzung von Plex Music Enhancer v1.1. Es richtet sich an Anwenderinnen und Anwender, die ihre Plex-Musikbibliothek kontrolliert mit besseren deutschen Album- und Künstlertexten pflegen möchten.
 
 Das Handbuch ist für GitHub, PDF-Export, MkDocs und gedruckte Ausgabe geeignet.
 
@@ -36,4 +36,3 @@ Das Handbuch ist für GitHub, PDF-Export, MkDocs und gedruckte Ausgabe geeignet.
 ## Inhaltsverzeichnis
 
 Beim PDF-Build wird das Inhaltsverzeichnis automatisch von Pandoc erzeugt.
-

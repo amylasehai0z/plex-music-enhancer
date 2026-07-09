@@ -4,13 +4,19 @@ subtitle: "Benutzerhandbuch"
 author: "Plex Music Enhancer contributors"
 lang: "de-DE"
 date: "2026-07-09"
-version: "1.0"
+version: "1.1"
 rights: "MIT License"
-subject: "Benutzerhandbuch fuer Plex Music Enhancer"
+subject: "Professionelles Benutzerhandbuch fuer Plex Music Enhancer"
+creator: "Pandoc mit XeLaTeX"
+github: "https://github.com/plex-music-enhancer/plex-music-enhancer"
 keywords:
   - Plex
   - Musik
   - Metadaten
   - KI
   - Handbuch
+  - MusicBrainz
+  - Wikipedia
+  - Discogs
+  - Last.fm
 ---

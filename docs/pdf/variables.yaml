@@ -1,0 +1,26 @@
+---
+papersize: "a4paper"
+fontsize: "11pt"
+documentclass: "book"
+classoption:
+  - "oneside"
+geometry:
+  - "top=25mm"
+  - "bottom=28mm"
+  - "inner=28mm"
+  - "outer=24mm"
+  - "headheight=16pt"
+  - "headsep=8mm"
+  - "footskip=12mm"
+colorlinks: true
+linkcolor: "PMEBlue"
+urlcolor: "PMETeal"
+toccolor: "PMEBlue"
+titlepage: true
+logo: "assets/logo/plex-music-enhancer-logo.svg"
+header-logo: "assets/logo/plex-music-enhancer-logo.svg"
+toc-depth: 3
+secnumdepth: 3
+lof: true
+lot: true
+---
