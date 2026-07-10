@@ -289,6 +289,8 @@ class StatisticsResponse(APIModel):
     artists: int = Field(default=0, ge=0)
     albums: int = Field(default=0, ge=0)
     tracks: int = Field(default=0, ge=0)
+    reviews: int = Field(default=0, ge=0)
+    average_rating: float | None = Field(default=None, serialization_alias="averageRating")
     cache_entries: int = Field(default=0, ge=0, serialization_alias="cacheEntries")
 
 
@@ -303,6 +305,66 @@ class PlexSyncStatusResponse(APIModel):
     tracks: int = Field(default=0, ge=0)
     last_sync: datetime | None = Field(default=None, serialization_alias="lastSync")
     error: str | None = None
+
+
+class AlbumReviewContent(APIModel):
+    """Structured AI review content persisted for one album."""
+
+    summary: str
+    rating: int = Field(ge=0, le=100)
+    genres: list[str] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    recommended_for: str = Field(alias="recommendedFor")
+    final_verdict: str = Field(alias="finalVerdict")
+
+
+class StoredAlbumReview(APIModel):
+    """Persisted AI album review."""
+
+    album_id: str = Field(alias="albumId")
+    artist: str
+    album: str
+    year: int | None = None
+    tracks: list[str] = Field(default_factory=list)
+    content: AlbumReviewContent
+    provider: str
+    model: str
+    prompt_name: str = Field(alias="promptName")
+    prompt_version: str = Field(alias="promptVersion")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class AlbumReviewGenerationResponse(APIModel):
+    """Response returned when album review generation starts."""
+
+    status: str
+    album_id: str = Field(alias="albumId")
+
+
+class AlbumReviewListItem(APIModel):
+    """Album item with review generation status."""
+
+    album_id: str = Field(alias="albumId")
+    artist: str
+    album: str
+    year: int | None = None
+    track_count: int = Field(default=0, ge=0, alias="trackCount")
+    review_status: str = Field(alias="reviewStatus")
+    running: bool = False
+    error: str | None = None
+    rating: int | None = Field(default=None, ge=0, le=100)
+    summary: str | None = None
+    review: StoredAlbumReview | None = None
+
+
+class AlbumReviewOverviewResponse(APIModel):
+    """Overview of synchronized albums and their stored review status."""
+
+    meta: ResponseMeta = Field(default_factory=ResponseMeta)
+    albums: list[AlbumReviewListItem] = Field(default_factory=list)
+    generated_reviews: int = Field(default=0, ge=0, alias="generatedReviews")
+    average_rating: float | None = Field(default=None, alias="averageRating")
 
 
 class ConfigurationResponse(APIModel):

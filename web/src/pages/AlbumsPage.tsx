@@ -36,7 +36,7 @@ export function AlbumsPage() {
   }
 
   function reviewAlbum(artist: string, album: string) {
-    navigate(`/reviews?target=album&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}&run=1`);
+    navigate(`/review-workflow?target=album&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}&run=1`);
   }
 
   return (

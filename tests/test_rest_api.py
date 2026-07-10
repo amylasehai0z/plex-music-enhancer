@@ -10,6 +10,10 @@ from fastapi.testclient import TestClient
 from plex_music_enhancer.api.errors import ReviewAPIError
 from plex_music_enhancer.api.models import (
     API_VERSION,
+    AlbumReviewContent,
+    AlbumReviewGenerationResponse,
+    AlbumReviewListItem,
+    AlbumReviewOverviewResponse,
     AlbumReviewResponse,
     ApplyResponse,
     ArtistReviewResponse,
@@ -18,6 +22,7 @@ from plex_music_enhancer.api.models import (
     PromptAnalysis,
     QualityAnalysis,
     ReviewDocument,
+    StoredAlbumReview,
     TokenUsage,
     VerificationAnalysis,
 )
@@ -29,6 +34,7 @@ from plex_music_enhancer.services import ConfigurationService
 from plex_music_enhancer.services.configuration import PersistentConfigurationStore
 from plex_music_enhancer.web.app import create_app
 from plex_music_enhancer.web.dependencies import (
+    get_album_review_service,
     get_apply_api_service,
     get_configuration_api_service,
     get_plex_sync_service,
@@ -207,6 +213,25 @@ def test_plex_sync_endpoints_use_injected_service() -> None:
     assert status.json()["tracks"] == 5200
 
 
+def test_album_review_endpoints_use_injected_service() -> None:
+    """Structured album review endpoints should use injectable services."""
+    app = create_app()
+    app.dependency_overrides[get_album_review_service] = lambda: _FakeAlbumReviewService()
+    client = TestClient(app)
+
+    overview = client.get("/api/v1/reviews")
+    started = client.post("/api/v1/reviews/generate/200")
+    review = client.get("/api/v1/reviews/200")
+
+    assert overview.status_code == 200
+    assert overview.json()["albums"][0]["reviewStatus"] == "present"
+    assert overview.json()["generatedReviews"] == 1
+    assert started.status_code == 200
+    assert started.json() == {"status": "started", "albumId": "200"}
+    assert review.status_code == 200
+    assert review.json()["content"]["rating"] == 88
+
+
 def test_error_handler_maps_api_errors() -> None:
     """API errors should map to configured HTTP status codes."""
     app = create_app()
@@ -381,6 +406,39 @@ class _FakePlexSyncService:
         )
 
 
+class _FakeAlbumReviewService:
+    """Fake structured album review service."""
+
+    def start_generation(self, album_id: str) -> AlbumReviewGenerationResponse:
+        """Return fake generation start response."""
+        return AlbumReviewGenerationResponse(status="started", album_id=album_id)
+
+    def get_review(self, album_id: str) -> StoredAlbumReview:
+        """Return a fake stored review."""
+        return _stored_album_review(album_id=album_id)
+
+    def overview(self) -> AlbumReviewOverviewResponse:
+        """Return a fake review overview."""
+        review = _stored_album_review(album_id="200")
+        return AlbumReviewOverviewResponse(
+            generated_reviews=1,
+            average_rating=88,
+            albums=[
+                AlbumReviewListItem(
+                    album_id="200",
+                    artist="Nina Simone",
+                    album="Pastel Blues",
+                    year=1965,
+                    track_count=2,
+                    review_status="present",
+                    rating=88,
+                    summary=review.content.summary,
+                    review=review,
+                )
+            ],
+        )
+
+
 def _api_review_document(
     *,
     target: str = "album",
@@ -423,4 +481,29 @@ def _api_review_document(
         provider="openai",
         model="gpt-5.5",
         context={"generatedAt": datetime(2026, 1, 1, tzinfo=UTC).isoformat()},
+    )
+
+
+def _stored_album_review(*, album_id: str) -> StoredAlbumReview:
+    """Return a fake structured stored album review."""
+    return StoredAlbumReview(
+        album_id=album_id,
+        artist="Nina Simone",
+        album="Pastel Blues",
+        year=1965,
+        tracks=["1. Be My Husband", "2. Nobody Knows You When You're Down and Out"],
+        content=AlbumReviewContent(
+            summary="Eine fokussierte Kritik.",
+            rating=88,
+            genres=["Blues", "Jazz"],
+            strengths=["Ausdrucksstarke Stimme"],
+            weaknesses=["Kurze Laufzeit"],
+            recommended_for="Hörer klassischer Vokalalben.",
+            final_verdict="Ein prägnantes, starkes Album.",
+        ),
+        provider="dummy",
+        model="dummy-v1",
+        prompt_name="album_review",
+        prompt_version="1.0",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )

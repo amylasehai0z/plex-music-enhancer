@@ -7,6 +7,7 @@ from functools import lru_cache
 from pydantic import SecretStr
 
 from plex_music_enhancer.ai import AIError, AIManager
+from plex_music_enhancer.album_reviews import AlbumReviewService
 from plex_music_enhancer.api.errors import ConfigurationAPIError, ProviderAPIError
 from plex_music_enhancer.api.services import (
     ApplyAPIService,
@@ -42,6 +43,12 @@ def get_configuration_api_service() -> ConfigurationAPIService:
 def get_plex_sync_service() -> PlexLibrarySyncService:
     """Return the process-wide Plex sync service."""
     return PlexLibrarySyncService()
+
+
+@lru_cache
+def get_album_review_service() -> AlbumReviewService:
+    """Return the process-wide structured album review service."""
+    return AlbumReviewService()
 
 
 def get_review_api_service() -> ReviewAPIService:

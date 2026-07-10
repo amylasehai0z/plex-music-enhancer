@@ -1,6 +1,6 @@
 import { Alert, Button, Grid, Group, Progress, Skeleton, Stack, Table, Text, Title } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { Album, ClipboardCheck, Cpu, Database, Library, RefreshCw, Server, UserRound } from "lucide-react";
+import { Album, ClipboardCheck, Cpu, Database, Library, RefreshCw, Server, Star, UserRound } from "lucide-react";
 
 import { MetricCard } from "../components/MetricCard";
 import { StatusPill } from "../components/StatusPill";
@@ -55,7 +55,14 @@ export function DashboardPage() {
             <MetricCard label="Cache" value={formatNumber(stats?.cacheEntries)} icon={Database} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
-            <MetricCard label="Reviews" value={formatNumber(reviewLog.data?.exists ? 1 : 0)} icon={ClipboardCheck} />
+            <MetricCard label="Reviews" value={formatNumber(stats?.reviews)} icon={ClipboardCheck} />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 3 }}>
+            <MetricCard
+              label="Ø Bewertung"
+              value={stats?.averageRating !== null && stats?.averageRating !== undefined ? `${stats.averageRating}` : "n/a"}
+              icon={Star}
+            />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
             <MetricCard label="Provider" value={formatNumber(providers.data?.length)} icon={Server} />

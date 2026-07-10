@@ -14,6 +14,8 @@ const endpoints = [
   { method: "GET", path: "/config", label: "Configuration" },
   { method: "GET", path: "/artists", label: "Artists" },
   { method: "GET", path: "/albums", label: "Albums" },
+  { method: "GET", path: "/reviews", label: "Album Reviews" },
+  { method: "GET", path: "/reviews/200", label: "Album Review Detail" },
   { method: "GET", path: "/debug/prompt", label: "Debug Prompt" },
   { method: "GET", path: "/debug/meta", label: "Debug Meta" },
   { method: "GET", path: "/debug/review", label: "Debug Review" },
@@ -21,6 +23,7 @@ const endpoints = [
   { method: "POST", path: "/preview", label: "Preview" },
   { method: "POST", path: "/review/album", label: "Review Album" },
   { method: "POST", path: "/review/artist", label: "Review Artist" },
+  { method: "POST", path: "/reviews/generate/200", label: "Generate Album Review" },
   { method: "POST", path: "/apply", label: "Apply" },
 ];
 

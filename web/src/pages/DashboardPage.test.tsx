@@ -42,7 +42,15 @@ function stubDashboardApi() {
       });
     }
     if (url.endsWith("/statistics")) {
-      return jsonResponse({ artists: 120, albums: 450, tracks: 5200, libraries: 1, cacheEntries: 3 });
+      return jsonResponse({
+        artists: 120,
+        albums: 450,
+        tracks: 5200,
+        libraries: 1,
+        reviews: 7,
+        averageRating: 82.4,
+        cacheEntries: 3,
+      });
     }
     if (url.endsWith("/providers")) {
       return jsonResponse([{ name: "openai", configured: true, model: "gpt-5.5", details: { type: "ai" } }]);

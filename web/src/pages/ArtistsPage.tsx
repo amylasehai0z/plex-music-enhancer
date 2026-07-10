@@ -33,7 +33,7 @@ export function ArtistsPage() {
   }
 
   function reviewArtist(artist: string) {
-    navigate(`/reviews?target=artist&artist=${encodeURIComponent(artist)}&run=1`);
+    navigate(`/review-workflow?target=artist&artist=${encodeURIComponent(artist)}&run=1`);
   }
 
   return (

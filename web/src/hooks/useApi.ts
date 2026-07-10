@@ -23,6 +23,21 @@ export function usePlexSyncMutation() {
   });
 }
 
+export function useAlbumReviews() {
+  return useQuery({
+    queryKey: ["albumReviews"],
+    queryFn: () => api.albumReviews.list(),
+    refetchInterval: (query) =>
+      query.state.data?.albums.some((album) => album.running) ? 1000 : false,
+  });
+}
+
+export function useAlbumReviewGenerationMutation() {
+  return useMutation({
+    mutationFn: (albumId: string) => api.albumReviews.generate(albumId),
+  });
+}
+
 export function useArtists() {
   return useQuery({ queryKey: ["artists"], queryFn: () => api.library.artists() });
 }

@@ -19,6 +19,7 @@ from plex_music_enhancer.web.routers import (
     preview,
     providers,
     review,
+    reviews,
     statistics,
     system,
 )
@@ -51,6 +52,7 @@ def create_app():
     app.include_router(albums.router, prefix=f"{prefix}/albums", tags=["albums"])
     app.include_router(plex.router, prefix=f"{prefix}/plex", tags=["plex"])
     app.include_router(review.router, prefix=f"{prefix}/review", tags=["review"])
+    app.include_router(reviews.router, prefix=f"{prefix}/reviews", tags=["reviews"])
     app.include_router(preview.router, prefix=f"{prefix}/preview", tags=["preview"])
     app.include_router(apply.router, prefix=f"{prefix}/apply", tags=["apply"])
     app.include_router(statistics.router, prefix=f"{prefix}/statistics", tags=["statistics"])

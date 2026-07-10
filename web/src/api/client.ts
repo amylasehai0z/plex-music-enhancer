@@ -1,5 +1,7 @@
 import type {
   ApplyRequest,
+  AlbumReviewGenerationResponse,
+  AlbumReviewOverviewResponse,
   ConfigurationUpdateRequest,
   ConfigurationResponse,
   DeveloperDoctorReport,
@@ -154,6 +156,18 @@ export class PlexApi {
   }
 }
 
+export class AlbumReviewsApi {
+  constructor(private readonly client: ApiClient) {}
+
+  list(): Promise<AlbumReviewOverviewResponse> {
+    return this.client.get<AlbumReviewOverviewResponse>("/reviews");
+  }
+
+  generate(albumId: string): Promise<AlbumReviewGenerationResponse> {
+    return this.client.post<AlbumReviewGenerationResponse>(`/reviews/generate/${albumId}`, {});
+  }
+}
+
 export class SystemApi {
   constructor(private readonly client: ApiClient) {}
 
@@ -209,6 +223,7 @@ export const api = {
   providers: new ProviderApi(client),
   library: new LibraryApi(client),
   plex: new PlexApi(client),
+  albumReviews: new AlbumReviewsApi(client),
   statistics: new StatisticsApi(client),
   system: new SystemApi(client),
   logs: new LogApi(client),

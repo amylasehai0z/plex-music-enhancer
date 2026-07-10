@@ -6,10 +6,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from plex_music_enhancer.album_reviews import AlbumReviewService
 from plex_music_enhancer.api.models import StatisticsResponse
 from plex_music_enhancer.cache.store import KnowledgeCacheStore
 from plex_music_enhancer.plex.sync import PlexLibrarySyncService
-from plex_music_enhancer.web.dependencies import get_plex_sync_service
+from plex_music_enhancer.web.dependencies import get_album_review_service, get_plex_sync_service
 
 router = APIRouter()
 
@@ -17,6 +18,7 @@ router = APIRouter()
 @router.get("", response_model=StatisticsResponse)
 async def statistics(
     sync_service: Annotated[PlexLibrarySyncService, Depends(get_plex_sync_service)],
+    review_service: Annotated[AlbumReviewService, Depends(get_album_review_service)],
 ) -> StatisticsResponse:
     """Return aggregate statistics from the latest Plex synchronization."""
     sync_status = sync_service.status()
@@ -26,5 +28,7 @@ async def statistics(
         artists=sync_status.artists,
         albums=sync_status.albums,
         tracks=sync_status.tracks,
+        reviews=review_service.review_count(),
+        average_rating=review_service.average_rating(),
         cache_entries=cache_stats.total_entries,
     )

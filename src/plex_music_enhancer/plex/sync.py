@@ -161,6 +161,10 @@ class PlexLibrarySyncService:
         with self._lock:
             return self._status
 
+    def snapshot(self) -> PlexSyncSnapshot | None:
+        """Return the persisted sync snapshot when available."""
+        return self._store.load()
+
     def start(self) -> PlexSyncStatusResponse:
         """Start a background synchronization job and return current status."""
         self._require_configured_settings()

@@ -52,6 +52,8 @@ export interface StatisticsResponse {
   artists: number;
   albums: number;
   tracks: number;
+  reviews: number;
+  averageRating?: number | null;
   cacheEntries: number;
 }
 
@@ -254,4 +256,53 @@ export interface ReviewRequest {
 
 export interface ApplyRequest extends ReviewRequest {
   force?: boolean;
+}
+
+export interface AlbumReviewContent {
+  summary: string;
+  rating: number;
+  genres: string[];
+  strengths: string[];
+  weaknesses: string[];
+  recommendedFor: string;
+  finalVerdict: string;
+}
+
+export interface StoredAlbumReview {
+  albumId: string;
+  artist: string;
+  album: string;
+  year?: number | null;
+  tracks: string[];
+  content: AlbumReviewContent;
+  provider: string;
+  model: string;
+  promptName: string;
+  promptVersion: string;
+  createdAt: string;
+}
+
+export interface AlbumReviewListItem {
+  albumId: string;
+  artist: string;
+  album: string;
+  year?: number | null;
+  trackCount: number;
+  reviewStatus: "present" | "missing" | "running" | "error" | string;
+  running: boolean;
+  error?: string | null;
+  rating?: number | null;
+  summary?: string | null;
+  review?: StoredAlbumReview | null;
+}
+
+export interface AlbumReviewOverviewResponse {
+  albums: AlbumReviewListItem[];
+  generatedReviews: number;
+  averageRating?: number | null;
+}
+
+export interface AlbumReviewGenerationResponse {
+  status: string;
+  albumId: string;
 }
