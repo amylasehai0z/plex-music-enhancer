@@ -58,6 +58,21 @@ Start:
 docker compose up -d
 ```
 
+Lokale Docker-Validierung:
+
+```bash
+docker build -t plex-music-enhancer:local .
+docker compose config
+docker run --rm plex-music-enhancer:local plex-enhancer --help
+docker run --rm plex-music-enhancer:local plex-enhancer serve --help
+docker compose up -d
+until curl --fail --silent http://127.0.0.1:1008/api/v1/system/health; do sleep 1; done
+docker compose down
+```
+
+Der Healthcheck verwendet einen bestehenden REST-Endpunkt. Es ist keine
+zusätzliche API erforderlich.
+
 ## 15.3 Volumes
 
 | Containerpfad | Zweck |
@@ -212,8 +227,8 @@ gestartet werden.
 ## 15.7 CI/CD
 
 Der GitHub Actions Workflow führt Tests, Linting, Frontend-Build, Paket-Build,
-Docker-Smoke-Build, Container-Smoke-Tests, Multi-Arch-Build, SBOM, Provenance
-und GHCR-Veröffentlichung aus.
+Docker-Smoke-Build, Container-Smoke-Tests, Health-Endpunkt-Smoke-Test,
+Multi-Arch-Build, SBOM, Provenance und GHCR-Veröffentlichung aus.
 
 Veröffentlicht werden Container-Images nur für:
 

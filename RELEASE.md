@@ -70,16 +70,26 @@ Inspect package metadata:
 ```bash
 git status
 git tag v1.0.0
-git push origin main --tags
+git push origin v1.0.0
 ```
 
 Use the actual version tag for non-v1.0 releases.
 
 ## 8. GitHub Release
 
-- Create a release from the tag.
-- Paste changelog highlights.
-- Attach artifacts if the release process produces them.
+GitHub Actions creates or updates the GitHub Release automatically for `v*.*.*`
+tags.
+
+Release assets:
+
+- Python wheel (`.whl`)
+- Source distribution (`.tar.gz`)
+- Build report
+- Docker analysis
+- Release readiness report
+
+The same workflow publishes the matching multi-arch image to GHCR with OCI
+labels, SBOM and provenance.
 
 ## 9. PyPI Release
 

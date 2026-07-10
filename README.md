@@ -310,6 +310,18 @@ The container listens on port `8080`; the default compose setup maps host port
 `1008` to container port `8080`. Persistent folders are mounted at `/config`,
 `/cache`, `/logs` and optionally `/music`.
 
+Local Docker validation:
+
+```bash
+docker build -t plex-music-enhancer:local .
+docker compose config
+docker run --rm plex-music-enhancer:local plex-enhancer --help
+docker run --rm plex-music-enhancer:local plex-enhancer serve --help
+docker compose up -d
+until curl --fail --silent http://127.0.0.1:1008/api/v1/system/health; do sleep 1; done
+docker compose down
+```
+
 Portainer is the recommended Docker management interface. Import
 `docker-compose.yml` as a Portainer Stack or create a single container from the
 GHCR image, then configure volumes, environment variables, port mapping and the
@@ -337,6 +349,44 @@ Restart the container
 
 Image updates are intentionally manual. The user decides in Portainer when a new
 image is pulled, applied or rolled back to an older GHCR tag.
+
+## Release Management
+
+A version tag is enough to create a complete release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The tag triggers GitHub Actions:
+
+```text
+Git Tag
+↓
+GitHub Actions
+↓
+Tests
+↓
+Python Wheel
+↓
+Source Distribution
+↓
+Docker Smoke Tests
+↓
+Multi-Arch Docker Image
+↓
+GHCR
+↓
+GitHub Release
+↓
+Release Artifacts
+```
+
+GitHub Releases are created or updated automatically for `v*.*.*` tags. Release
+assets include the Python wheel, source distribution, build report, Docker
+analysis and release readiness report. GHCR receives the matching release image
+and SemVer tags.
 
 ## Web Interface and REST API
 

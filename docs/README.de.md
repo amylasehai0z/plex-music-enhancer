@@ -68,6 +68,7 @@ plex-enhancer doctor
 - [13 Glossar](handbuch/13-glossar.md)
 - [14 Anhang](handbuch/14-anhang.md)
 - [15 Container, Portainer und Synology](handbuch/15-container.md)
+- [16 Release Management](handbuch/16-release-management.md)
 
 ## PDF-Handbuch
 

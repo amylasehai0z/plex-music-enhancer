@@ -31,4 +31,8 @@ ln -sf /logs/plex_review.log /tmp/plex_review.log
 ln -sf /logs/openai_prompt.txt /tmp/openai_prompt.txt
 ln -sf /logs/openai_prompt_meta.json /tmp/openai_prompt_meta.json
 
+if [ "${1:-}" = "plex-enhancer" ]; then
+  shift
+fi
+
 exec plex-enhancer "$@"

@@ -62,6 +62,22 @@ The compose file can be imported directly as a Portainer Stack. Portainer reads
 the same service definition, image name, volume mounts, environment variables,
 port mapping and healthcheck.
 
+## Local Docker Validation
+
+Use the same commands locally that the release workflow relies on:
+
+```bash
+docker build -t plex-music-enhancer:local .
+docker compose config
+docker run --rm plex-music-enhancer:local plex-enhancer --help
+docker run --rm plex-music-enhancer:local plex-enhancer serve --help
+docker compose up -d
+until curl --fail --silent http://127.0.0.1:1008/api/v1/system/health; do sleep 1; done
+docker compose down
+```
+
+The healthcheck uses the existing REST endpoint and does not require a new API.
+
 ## Environment
 
 Supported container variables:
@@ -216,11 +232,15 @@ changes.
 - frontend tests
 - frontend build
 - Python package build
+- GitHub Actions artifact upload for wheel and source distribution
 - Docker smoke build
 - container smoke tests for `plex-enhancer --help` and `plex-enhancer serve --help`
+- container health endpoint smoke test
+- build report, Docker analysis and release readiness report
 - multi-arch Docker build for `linux/amd64` and `linux/arm64`
 - SBOM and provenance attestation
 - GHCR publish for `main`, `develop` and release tags
+- automatic GitHub Release creation for version tags
 
 Pull requests and feature branches run validation without publishing images.
 This keeps branch feedback fast while publishing only deployable images.

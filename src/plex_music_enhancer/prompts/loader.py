@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 
@@ -37,4 +38,12 @@ class PromptLoader:
 def _default_template_directory() -> Path:
     """Return the default project prompt template directory."""
     project_root = Path(__file__).resolve().parents[3]
-    return project_root / "prompts"
+    source_templates = project_root / "prompts"
+    if source_templates.exists():
+        return source_templates
+
+    installed_templates = Path(sys.prefix) / "prompts"
+    if installed_templates.exists():
+        return installed_templates
+
+    return source_templates

@@ -44,8 +44,8 @@ logs/
 *.sqlite3
 
 # Local caches
-cache/
-data/
+/cache/
+/data/
 docker/config/*
 docker/cache/*
 docker/logs/*

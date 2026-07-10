@@ -70,8 +70,8 @@ Repository = "https://github.com/amylasehai0z/plex-music-enhancer"
 [tool.hatch.build.targets.wheel]
 packages = ["src/plex_music_enhancer"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"src/plex_music_enhancer/web/static" = "plex_music_enhancer/web/static"
+[tool.hatch.build.targets.wheel.shared-data]
+"prompts" = "prompts"
 
 [tool.hatch.version]
 path = "src/plex_music_enhancer/constants.py"

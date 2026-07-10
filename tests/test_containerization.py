@@ -86,12 +86,21 @@ def test_ghcr_workflow_builds_and_publishes_container() -> None:
     assert "linux/amd64,linux/arm64" in workflow
     assert "sbom: true" in workflow
     assert "provenance: true" in workflow
-    assert "docker run --rm --entrypoint plex-enhancer plex-music-enhancer:smoke --help" in workflow
-    assert (
-        "docker run --rm --entrypoint plex-enhancer plex-music-enhancer:smoke serve --help"
-        in workflow
-    )
+    assert "actions/upload-artifact" in workflow
+    assert "actions/download-artifact" in workflow
+    assert "python-dist" in workflow
+    assert "build-reports" in workflow
+    assert "artifacts/build_report.txt" in workflow
+    assert "artifacts/docker_analysis.txt" in workflow
+    assert "artifacts/release_readiness_report.txt" in workflow
+    assert "docker run --rm plex-music-enhancer:smoke plex-enhancer --help" in workflow
+    assert "docker run --rm plex-music-enhancer:smoke plex-enhancer serve --help" in workflow
+    assert "http://127.0.0.1:18080/api/v1/system/health" in workflow
+    assert "docker rm -f plex-music-enhancer-smoke" in workflow
     assert "refs/heads/develop" in workflow
+    assert "Create GitHub release" in workflow
+    assert "gh release create" in workflow
+    assert "gh release edit" in workflow
     assert "npm test" in workflow
     assert "pytest" in workflow
 
@@ -110,6 +119,9 @@ def test_deployment_docs_recommend_portainer_without_automatic_updater() -> None
     assert "linux/amd64" in docs
     assert "linux/arm64" in docs
     assert "SBOM" in docs
+    assert "docker build -t plex-music-enhancer:local ." in docs
+    assert "docker run --rm plex-music-enhancer:local plex-enhancer --help" in docs
+    assert "docker compose config" in docs
     legacy_updater_name = "Watch" + "tower"
     assert legacy_updater_name not in docs
     assert legacy_updater_name.lower() not in docs
