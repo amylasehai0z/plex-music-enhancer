@@ -239,6 +239,41 @@ def test_album_review_endpoints_use_injected_service() -> None:
     assert review.json()["content"]["rating"] == 88
 
 
+def test_album_endpoints_use_plex_sync_snapshot() -> None:
+    """Album endpoints should expose synchronized Plex album aggregates and detail."""
+    app = create_app()
+    app.dependency_overrides[get_plex_sync_service] = lambda: _FakePlexSyncService()
+    app.dependency_overrides[get_album_review_service] = lambda: _FakeAlbumReviewService()
+    client = TestClient(app)
+
+    albums = client.get("/api/v1/albums")
+    detail = client.get("/api/v1/albums/200")
+
+    assert albums.status_code == 200
+    assert albums.json()[0] == {
+        "ratingKey": "200",
+        "title": "Pastel Blues",
+        "artist": "Nina Simone",
+        "artistId": "100",
+        "library": "Music",
+        "year": 1965,
+        "trackCount": 2,
+        "genres": ["Blues", "Jazz"],
+        "reviewStatus": "present",
+        "summaryPresent": True,
+        "plannedAction": None,
+    }
+    assert albums.json()[1]["reviewStatus"] == "missing"
+    assert albums.json()[1]["trackCount"] == 1
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["title"] == "Pastel Blues"
+    assert payload["artist"] == "Nina Simone"
+    assert payload["artistId"] == "100"
+    assert payload["tracks"] == ["1. Be My Husband", "2. Sinnerman"]
+    assert payload["review"]["content"]["rating"] == 88
+
+
 def test_artist_endpoints_use_plex_sync_snapshot() -> None:
     """Artist endpoints should expose synchronized Plex artist aggregates."""
     app = create_app()

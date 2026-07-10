@@ -54,6 +54,14 @@ export function useAlbums() {
   return useQuery({ queryKey: ["albums"], queryFn: () => api.library.albums() });
 }
 
+export function useAlbum(albumId: string | null) {
+  return useQuery({
+    queryKey: ["albums", albumId],
+    queryFn: () => api.library.album(albumId ?? ""),
+    enabled: Boolean(albumId),
+  });
+}
+
 export function useReviewMutation() {
   return useMutation({
     mutationFn: (request: ReviewRequest) => api.review.review(request),

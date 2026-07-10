@@ -7,6 +7,7 @@ import type {
   DeveloperDoctorReport,
   DeveloperExplanation,
   LibraryAlbum,
+  LibraryAlbumDetail,
   LibraryArtist,
   LibraryArtistDetail,
   LogResponse,
@@ -138,6 +139,10 @@ export class LibraryApi {
 
   albums(): Promise<LibraryAlbum[]> {
     return this.client.get<LibraryAlbum[]>("/albums");
+  }
+
+  album(albumId: string): Promise<LibraryAlbumDetail> {
+    return this.client.get<LibraryAlbumDetail>(`/albums/${encodeURIComponent(albumId)}`);
   }
 }
 

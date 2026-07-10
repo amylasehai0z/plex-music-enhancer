@@ -141,10 +141,19 @@ export interface LibraryAlbum {
   ratingKey: string;
   title: string;
   artist: string;
+  artistId?: string | null;
   library?: string | null;
   year?: number | null;
+  trackCount: number;
+  genres: string[];
+  reviewStatus: "missing" | "present" | "running" | "error";
   summaryPresent: boolean;
   plannedAction?: string | null;
+}
+
+export interface LibraryAlbumDetail extends LibraryAlbum {
+  tracks: string[];
+  review?: StoredAlbumReview | null;
 }
 
 export interface LibraryArtistDetail extends LibraryArtist {
