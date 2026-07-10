@@ -3,10 +3,24 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { App } from "./App";
+import { DeveloperModeProvider } from "./stores/developerMode";
+
 vi.mock("@monaco-editor/react", () => ({
   Editor: () => <div>Editor</div>,
   DiffEditor: () => <div>Diff Editor</div>,
 }));
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    createBrowserRouter: (
+      routes: Parameters<typeof actual.createBrowserRouter>[0],
+      options?: Parameters<typeof actual.createBrowserRouter>[1],
+    ) => actual.createMemoryRouter(routes, { ...options, initialEntries: ["/"] }),
+  };
+});
 
 function stubDashboardApi() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -37,18 +51,11 @@ function stubDashboardApi() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.resetModules();
 });
 
 describe("App navigation", () => {
   it("shows the desktop navigation", async () => {
     const fetchMock = stubDashboardApi();
-    vi.resetModules();
-    window.history.replaceState({}, "", "/");
-    const [{ App }, { DeveloperModeProvider }] = await Promise.all([
-      import("./App"),
-      import("./stores/developerMode"),
-    ]);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const { container } = render(
       <MantineProvider>
