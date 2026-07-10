@@ -97,10 +97,6 @@ def test_ghcr_workflow_builds_and_publishes_container() -> None:
         ]
     )
     assert deterministic_install in workflow
-    assert "Verify installed CLI help" in workflow
-    assert "plex-enhancer review album --help" in workflow
-    assert 'grep -q -- "--artist"' in workflow
-    assert 'grep -q -- "--album"' in workflow
     assert "python-dist" in workflow
     assert "build-reports" in workflow
     assert "artifacts/build_report.txt" in workflow

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from tomllib import loads
@@ -65,6 +66,13 @@ from plex_music_enhancer.services import (
 )
 
 runner = CliRunner()
+HELP_ENV = {"COLUMNS": "100", "NO_COLOR": "1", "TERM": "dumb"}
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _normalized_cli_output(text: str) -> str:
+    """Return CLI output without ANSI escape sequences."""
+    return ANSI_ESCAPE_RE.sub("", text)
 
 
 def test_serve_help_documents_default_port_8080() -> None:
@@ -1133,13 +1141,14 @@ def test_review_help_lists_album_and_artist_commands() -> None:
 
 
 def test_review_album_help_shows_album_options() -> None:
-    result = runner.invoke(app, ["review", "album", "--help"])
+    result = runner.invoke(app, ["review", "album", "--help"], env=HELP_ENV)
+    output = _normalized_cli_output(result.output)
 
     assert result.exit_code == 0
-    assert "--artist" in result.stdout
-    assert "--album" in result.stdout
-    assert "--translate" in result.stdout
-    assert "--improve" in result.stdout
+    assert "--artist" in output
+    assert "--album" in output
+    assert "--translate" in output
+    assert "--improve" in output
 
 
 def test_review_artist_command_prints_json(monkeypatch) -> None:

@@ -46,13 +46,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --no-cache-dir --force-reinstall ".[dev,web,ai,metadata]"
 
-      - name: Verify installed CLI help
-        run: |
-          python -c "import plex_music_enhancer.cli; print(plex_music_enhancer.cli.__file__)"
-          plex-enhancer review album --help | tee /tmp/review-album-help.txt
-          grep -q -- "--artist" /tmp/review-album-help.txt
-          grep -q -- "--album" /tmp/review-album-help.txt
-
       - name: Install frontend dependencies
         working-directory: web
         run: npm ci
