@@ -8,8 +8,18 @@ import pytest
 
 from plex_music_enhancer.ai.models import GeneratedSummary
 from plex_music_enhancer.api.errors import ConfigurationAPIError, ReviewAPIError
-from plex_music_enhancer.api.models import API_VERSION, AlbumReviewRequest, PromptAnalysis
-from plex_music_enhancer.api.services import ReviewAPIService, review_document_to_api
+from plex_music_enhancer.api.models import (
+    API_VERSION,
+    AlbumReviewRequest,
+    ApplyRequest,
+    PromptAnalysis,
+)
+from plex_music_enhancer.api.services import (
+    ApplyAPIService,
+    ReviewAPIService,
+    review_document_to_api,
+)
+from plex_music_enhancer.apply import ApplyResult
 from plex_music_enhancer.enrichment import (
     AlbumContext,
     MusicBrainzAlbumContext,
@@ -94,6 +104,14 @@ def test_review_api_service_wraps_review_failures() -> None:
         service.review(AlbumReviewRequest(artist="Nina Simone", album="Pastel Blues"))
 
 
+def test_apply_api_service_rejects_unverified_plex_write() -> None:
+    """Apply API must not expose a failed Plex verification as success."""
+    service = ApplyAPIService(_FakeApplyService(status="FAILED", verification_passed=False))  # type: ignore[arg-type]
+
+    with pytest.raises(ReviewAPIError, match="verification failed"):
+        service.apply(ApplyRequest(target="artist", artist="Bonnie Tyler"))
+
+
 class _FakeReviewService:
     """Minimal fake review service."""
 
@@ -111,6 +129,35 @@ class _FailingReviewService:
     def create_review(self, *, artist: str, album: str, prompt_name: str | None = None):
         """Raise an error."""
         raise RuntimeError("boom")
+
+
+class _FakeApplyService:
+    """Minimal fake apply service."""
+
+    def __init__(self, *, status: str, verification_passed: bool) -> None:
+        self._status = status
+        self._verification_passed = verification_passed
+
+    def apply_artist_summary(self, *, artist: str) -> ApplyResult:
+        """Return a fake artist apply result."""
+        assert artist == "Bonnie Tyler"
+        return ApplyResult(
+            status=self._status,
+            artist=artist,
+            album="artist",
+            rating_key="100",
+            backup_created=True,
+            write_successful=True,
+            verification_passed=self._verification_passed,
+            audit_stored=True,
+            message="verification failed",
+            review=_review_document(),
+        )
+
+    def apply_album_summary(self, *, artist: str, album: str, prompt_name: str) -> ApplyResult:
+        """Return a fake album apply result."""
+        del artist, album, prompt_name
+        raise AssertionError("not used")
 
 
 def _review_document() -> ReviewDocument:

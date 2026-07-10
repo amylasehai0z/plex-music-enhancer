@@ -14,7 +14,7 @@ class PlexWriteError(Exception):
 
 
 class VerificationResult(BaseModel):
-    """Result of reloading an album and verifying the expected summary."""
+    """Result of reloading Plex metadata and verifying the expected summary."""
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
@@ -23,28 +23,33 @@ class VerificationResult(BaseModel):
     actual_summary: str | None = Field(serialization_alias="actualSummary")
 
 
-def write_album_summary(album: Any, summary: str) -> None:
-    """Write an album summary through the supported plexapi batch edit workflow."""
-    batch_edits = getattr(album, "batchEdits", None)
-    edit_summary = getattr(album, "editSummary", None)
-    save_edits = getattr(album, "saveEdits", None)
+def write_metadata_summary(item: Any, summary: str) -> None:
+    """Write a Plex metadata summary through the supported plexapi edit workflow."""
+    batch_edits = getattr(item, "batchEdits", None)
+    edit_summary = getattr(item, "editSummary", None)
+    save_edits = getattr(item, "saveEdits", None)
 
-    if not callable(batch_edits):
-        raise PlexWriteError("album.batchEdits() is not available on this Plex album object.")
     if not callable(edit_summary):
-        raise PlexWriteError("album.editSummary() is not available on this Plex album object.")
-    if not callable(save_edits):
-        raise PlexWriteError("album.saveEdits() is not available on this Plex album object.")
+        raise PlexWriteError("editSummary() is not available on this Plex metadata object.")
 
-    batch_edits()
+    if callable(batch_edits) and callable(save_edits):
+        batch_edits()
+        edit_summary(summary)
+        save_edits()
+        return
+
     edit_summary(summary)
-    save_edits()
 
 
-def verify_album_summary(album: Any, expected_summary: str) -> VerificationResult:
-    """Reload an album from Plex and verify its summary."""
-    reloaded_album = reload_album(album)
-    actual_summary = _optional_string(getattr(reloaded_album, SUMMARY_FIELD, None))
+def write_album_summary(album: Any, summary: str) -> None:
+    """Write an album summary through the supported plexapi edit workflow."""
+    write_metadata_summary(album, summary)
+
+
+def verify_metadata_summary(item: Any, expected_summary: str) -> VerificationResult:
+    """Reload Plex metadata and verify its summary."""
+    reloaded_item = reload_metadata_item(item)
+    actual_summary = _optional_string(getattr(reloaded_item, SUMMARY_FIELD, None))
     return VerificationResult(
         passed=(actual_summary or "") == expected_summary,
         expected_summary=expected_summary,
@@ -52,14 +57,24 @@ def verify_album_summary(album: Any, expected_summary: str) -> VerificationResul
     )
 
 
-def reload_album(album: Any) -> Any:
-    """Reload an album object from Plex."""
-    reload_method = getattr(album, "reload", None)
+def verify_album_summary(album: Any, expected_summary: str) -> VerificationResult:
+    """Reload an album from Plex and verify its summary."""
+    return verify_metadata_summary(album, expected_summary)
+
+
+def reload_metadata_item(item: Any) -> Any:
+    """Reload a Plex metadata object from Plex."""
+    reload_method = getattr(item, "reload", None)
     if not callable(reload_method):
-        raise PlexWriteError("Album could not be reloaded from Plex after writing.")
+        raise PlexWriteError("Plex metadata could not be reloaded after writing.")
 
     result = reload_method()
-    return album if result is None else result
+    return item if result is None else result
+
+
+def reload_album(album: Any) -> Any:
+    """Reload an album object from Plex."""
+    return reload_metadata_item(album)
 
 
 def _optional_string(value: object) -> str | None:

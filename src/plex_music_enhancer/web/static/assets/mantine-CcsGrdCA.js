@@ -31,23 +31,23 @@ function Vv(t,r){for(var o=0;o<r.length;o++){const s=r[o];if(typeof s!="string"&
     margin-right: `).concat(d,"px ").concat(s,`;
     `),o==="padding"&&"padding-right: ".concat(d,"px ").concat(s,";")].filter(Boolean).join(""),`
   }
-
+  
   .`).concat(jl,` {
     right: `).concat(d,"px ").concat(s,`;
   }
-
+  
   .`).concat(Il,` {
     margin-right: `).concat(d,"px ").concat(s,`;
   }
-
+  
   .`).concat(jl," .").concat(jl,` {
     right: 0 `).concat(s,`;
   }
-
+  
   .`).concat(Il," .").concat(Il,` {
     margin-right: 0 `).concat(s,`;
   }
-
+  
   body[`).concat(Lo,`] {
     `).concat(A1,": ").concat(d,`px;
   }

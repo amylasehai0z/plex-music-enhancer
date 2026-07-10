@@ -1,6 +1,7 @@
 import {
   Accordion,
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Card,
@@ -40,6 +41,7 @@ export function ReviewPage() {
   const [split, setSplit] = useLocalStorage({ key: "pme:review-split", defaultValue: 50 });
   const review = useReviewMutation();
   const apply = useApplyMutation();
+  const [applyStatus, setApplyStatus] = useState<{ color: "blue" | "red" | "teal"; message: string } | null>(null);
   const autoRunKey = useRef<string | null>(null);
   const document = review.data?.document;
   const { enabled: developerMode, toggle: toggleDeveloperMode } = useDeveloperMode();
@@ -144,6 +146,8 @@ export function ReviewPage() {
   }
 
   function applyCurrentReview() {
+    setApplyStatus({ color: "blue", message: "Übernahme gestartet." });
+    notifications.show({ color: "blue", message: "Übernahme gestartet." });
     apply.mutate(
       {
         target,
@@ -153,8 +157,31 @@ export function ReviewPage() {
         model,
       },
       {
-        onSuccess: () => notifications.show({ color: "teal", message: "Review erfolgreich übernommen." }),
-        onError: (error) => notifications.show({ color: "red", message: error.message }),
+        onSuccess: (response) => {
+          if (
+            response.status !== "SUCCESS" ||
+            !response.writeSuccessful ||
+            !response.verificationPassed
+          ) {
+            setApplyStatus({
+              color: "red",
+              message: response.message || "Plex-Verifikation fehlgeschlagen.",
+            });
+            notifications.show({
+              color: "red",
+              message: response.message || "Plex-Verifikation fehlgeschlagen.",
+            });
+            return;
+          }
+          setApplyStatus({ color: "teal", message: "Plex-Verifikation erfolgreich." });
+          notifications.show({ color: "teal", message: "Plex aktualisiert." });
+          notifications.show({ color: "teal", message: "Plex-Verifikation erfolgreich." });
+          notifications.show({ color: "teal", message: "Review erfolgreich übernommen." });
+        },
+        onError: (error) => {
+          setApplyStatus({ color: "red", message: error.message });
+          notifications.show({ color: "red", message: error.message });
+        },
       },
     );
   }
@@ -207,6 +234,11 @@ export function ReviewPage() {
       </form>
       {document ? (
         <>
+          {applyStatus ? (
+            <Alert color={applyStatus.color} role="status">
+              {applyStatus.message}
+            </Alert>
+          ) : null}
           <Card withBorder radius="sm" className="review-hero">
             <Group justify="space-between" align="start">
               <Group align="start">

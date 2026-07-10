@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol
 from urllib.parse import quote, urljoin
 
@@ -13,9 +14,13 @@ from plex_music_enhancer.apply.backup import BackupStore, SummaryBackup
 from plex_music_enhancer.apply.verification import (
     VerificationResult,
     verify_album_summary,
+    verify_metadata_summary,
     write_album_summary,
+    write_metadata_summary,
 )
 from plex_music_enhancer.review import ReviewDocument, ReviewService, evaluate_review_policy
+
+logger = logging.getLogger(__name__)
 
 
 class ApplyError(Exception):
@@ -45,10 +50,10 @@ class ApplyResult(BaseModel):
 
 
 class _AlbumLoader(Protocol):
-    """Callable that returns a mutable Plex album object by rating key."""
+    """Callable that returns a mutable Plex metadata object by rating key."""
 
     def __call__(self, rating_key: str) -> Any:
-        """Load a Plex album object."""
+        """Load a Plex metadata object."""
 
 
 def plex_metadata_path(rating_key: str) -> str:
@@ -165,6 +170,8 @@ class ApplyService:
         generated = review.preview.generated_summary
         prompt = review.preview.rendered_prompt
         artist_name = context.plex.artist
+        is_artist = not hasattr(context.plex, "album")
+        target = "artist" if is_artist else "album"
         album_name = getattr(context.plex, "album", "artist")
         try:
             backup = self._backup_store.create_backup(review)
@@ -179,15 +186,45 @@ class ApplyService:
         verification: VerificationResult | None = None
 
         try:
-            album_object = self._album_loader(context.plex.rating_key)
-            write_album_summary(album_object, review.proposed_summary)
+            logger.info(
+                "Applying Plex %s summary for artist=%s rating_key=%s",
+                target,
+                artist_name,
+                context.plex.rating_key,
+            )
+            metadata_object = self._album_loader(context.plex.rating_key)
+            if is_artist:
+                write_metadata_summary(metadata_object, review.proposed_summary)
+            else:
+                write_album_summary(metadata_object, review.proposed_summary)
             write_successful = True
-            verification = verify_album_summary(album_object, review.proposed_summary)
+            verification = (
+                verify_metadata_summary(metadata_object, review.proposed_summary)
+                if is_artist
+                else verify_album_summary(metadata_object, review.proposed_summary)
+            )
             if not verification.passed:
                 message = "Summary write completed, but verification failed after reload."
+            logger.info(
+                "Plex %s summary apply result artist=%s rating_key=%s "
+                "write_successful=%s verification_passed=%s",
+                target,
+                artist_name,
+                context.plex.rating_key,
+                write_successful,
+                verification.passed,
+            )
         except Exception as exc:
             attempted_url = plex_metadata_url(self._base_url, context.plex.rating_key)
             underlying = str(exc) or exc.__class__.__name__
+            logger.warning(
+                "Plex %s summary apply failed artist=%s rating_key=%s attempted_url=%s error=%s",
+                target,
+                artist_name,
+                context.plex.rating_key,
+                attempted_url,
+                underlying,
+            )
             message = (
                 "Summary write failed.\n"
                 f"Attempted URL: {attempted_url}\n"

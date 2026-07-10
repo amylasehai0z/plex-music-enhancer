@@ -1,5 +1,6 @@
 import type {
   ApplyRequest,
+  ApplyResponse,
   AlbumReviewGenerationResponse,
   AlbumReviewOverviewResponse,
   ConfigurationUpdateRequest,
@@ -97,8 +98,8 @@ export class PreviewApi {
 export class ApplyApi {
   constructor(private readonly client: ApiClient) {}
 
-  apply(request: ApplyRequest): Promise<unknown> {
-    return this.client.post("/apply", request);
+  apply(request: ApplyRequest): Promise<ApplyResponse> {
+    return this.client.post<ApplyResponse>("/apply", request);
   }
 }
 

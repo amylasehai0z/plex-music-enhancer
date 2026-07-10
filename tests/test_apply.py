@@ -16,16 +16,20 @@ from plex_music_enhancer.apply.service import (
 )
 from plex_music_enhancer.enrichment import (
     AlbumContext,
+    ArtistContext,
     MusicBrainzAlbumContext,
+    MusicBrainzArtistContext,
     PipelineContext,
     PlexAlbumContext,
+    PlexArtistContext,
     WikipediaAlbumContext,
+    WikipediaArtistContext,
 )
 from plex_music_enhancer.prompts import RenderedPrompt
 from plex_music_enhancer.quality import QualityLevel
 from plex_music_enhancer.quality import QualityReport as QAReport
 from plex_music_enhancer.review import QualityReport, ReviewDocument
-from plex_music_enhancer.services import EnrichmentPreviewDocument
+from plex_music_enhancer.services import ArtistPreviewDocument, EnrichmentPreviewDocument
 
 
 def test_apply_service_writes_verifies_backs_up_and_audits(tmp_path: Path) -> None:
@@ -46,6 +50,50 @@ def test_apply_service_writes_verifies_backs_up_and_audits(tmp_path: Path) -> No
     assert Path(result.audit_path).exists()
     assert album.calls == ["batchEdits", "editSummary", "saveEdits", "reload"]
     assert album.summary == _german_summary()
+
+
+def test_apply_service_writes_and_verifies_artist_biography(tmp_path: Path) -> None:
+    """Artist apply must write the biography to Plex and verify the reloaded artist."""
+    artist_item = FakeAlbum(summary="Englische Plex-Biografie.")
+    service = _apply_service(
+        tmp_path=tmp_path,
+        album=artist_item,
+        document=_artist_review_document(),
+    )
+
+    result = service.apply_artist_summary(artist="Bonnie Tyler")
+
+    assert result.status == "SUCCESS"
+    assert result.artist == "Bonnie Tyler"
+    assert result.album == "artist"
+    assert result.rating_key == "100"
+    assert result.write_successful is True
+    assert result.verification_passed is True
+    assert result.audit_stored is True
+    assert artist_item.calls == ["batchEdits", "editSummary", "saveEdits", "reload"]
+    assert artist_item.summary == _german_summary()
+
+
+def test_apply_service_reports_failed_artist_verification(tmp_path: Path) -> None:
+    """Artist apply must not report success when Plex reload keeps the old biography."""
+    artist_item = FakeAlbum(
+        summary="Englische Plex-Biografie.",
+        reload_summary="Englische Plex-Biografie.",
+    )
+    service = _apply_service(
+        tmp_path=tmp_path,
+        album=artist_item,
+        document=_artist_review_document(),
+    )
+
+    result = service.apply_artist_summary(artist="Bonnie Tyler")
+
+    assert result.status == "FAILED"
+    assert result.write_successful is True
+    assert result.verification_passed is False
+    assert result.verification is not None
+    assert result.verification.actual_summary == "Englische Plex-Biografie."
+    assert "verification failed" in result.message
 
 
 def test_apply_service_keeps_backup_when_write_fails(tmp_path: Path) -> None:
@@ -309,8 +357,13 @@ class FakeReviewService:
 
     def create_review(self, *, artist: str, album: str) -> ReviewDocument:
         """Return a fixed review document."""
-        assert artist == "Nina Simone"
-        assert album == "Pastel Blues"
+        assert artist in {"Nina Simone", "Bonnie Tyler"}
+        assert album in {"Pastel Blues", "artist"}
+        return self._document
+
+    def create_artist_review(self, *, artist: str) -> ReviewDocument:
+        """Return a fixed artist review document."""
+        assert artist == "Bonnie Tyler"
         return self._document
 
 
@@ -409,11 +462,12 @@ def _apply_service(
     qa_score: int | None = None,
     backup_store: BackupStore | None = None,
     audit_store: AuditStore | None = None,
+    document: ReviewDocument | None = None,
 ) -> ApplyService:
     """Create an apply service with fake dependencies."""
     return ApplyService(
         review_service=FakeReviewService(
-            _review_document(status=quality_status, qa_score=qa_score)
+            document or _review_document(status=quality_status, qa_score=qa_score)
         ),  # type: ignore[arg-type]
         base_url="http://localhost:32400",
         token=SecretStr("secret-token"),
@@ -488,6 +542,46 @@ def _preview_document(*, qa_score: int | None = None) -> EnrichmentPreviewDocume
     )
 
 
+def _artist_review_document() -> ReviewDocument:
+    """Return an artist biography review document fixture."""
+    return ReviewDocument(
+        preview=ArtistPreviewDocument(
+            context=_artist_context(),
+            rendered_prompt=RenderedPrompt(
+                name="artist_biography",
+                version="1.0",
+                rendered_text="Prompt",
+                variables={"artist": "Bonnie Tyler", "language": "de"},
+                template="Template",
+            ),
+            generated_summary=GeneratedSummary(
+                language="de",
+                text=_german_summary(),
+                provider="openai",
+                model="gpt-5.5",
+                prompt_name="artist_biography",
+                prompt_version="1.0",
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                confidence=0.9,
+                source_count=3,
+                metadata={"prompt_tokens": 100, "completion_tokens": 40},
+            ),
+            generation_time_seconds=0.25,
+        ),
+        current_summary="Englische Plex-Biografie.",
+        proposed_summary=_german_summary(),
+        diff="--- current summary\n+++ generated summary\n",
+        quality=QualityReport(
+            status="PASS",
+            critical_validation="PASS",
+            editorial_validation="PASS",
+            publishable=True,
+            checks={"not_empty": True, "language_is_german": True},
+            word_count=90,
+        ),
+    )
+
+
 def _album_context() -> AlbumContext:
     """Return album context fixture."""
     return AlbumContext(
@@ -515,6 +609,36 @@ def _album_context() -> AlbumContext:
             title="Pastel Blues",
             extract="Wikipedia summary",
             page_url="https://de.wikipedia.org/wiki/Pastel_Blues",
+        ),
+        pipeline=PipelineContext(
+            collected_sources=["plex", "musicbrainz", "wikipedia"],
+            missing_fields=[],
+            warnings=[],
+            ready_for_generation=True,
+        ),
+    )
+
+
+def _artist_context() -> ArtistContext:
+    """Return artist context fixture."""
+    return ArtistContext(
+        plex=PlexArtistContext(
+            rating_key="100",
+            artist="Bonnie Tyler",
+            summary="Englische Plex-Biografie.",
+            genres=["Pop", "Rock"],
+        ),
+        musicbrainz=MusicBrainzArtistContext(
+            artist_mbid="artist-mbid",
+            artist_name="Bonnie Tyler",
+            genres=["pop", "rock"],
+            confidence=96,
+        ),
+        wikipedia=WikipediaArtistContext(
+            language="de",
+            title="Bonnie Tyler",
+            extract="Wikipedia biography",
+            page_url="https://de.wikipedia.org/wiki/Bonnie_Tyler",
         ),
         pipeline=PipelineContext(
             collected_sources=["plex", "musicbrainz", "wikipedia"],

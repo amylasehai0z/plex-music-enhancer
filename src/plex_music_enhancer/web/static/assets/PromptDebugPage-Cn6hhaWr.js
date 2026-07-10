@@ -1,4 +1,4 @@
-import{j as e,G as y,m as P,l as R,w as d,s as n,J as s}from"./mantine-CcsGrdCA.js";import{I as o,A as D}from"./InsightCard-BiYSVc3O.js";import{M as c}from"./MonacoPanel-B1hqE2-b.js";import{c as T,i as L,j as M,k as _,R as B}from"./index-CE6FUmj3.js";import{C as O}from"./copy-CoiPB_v_.js";import"./monaco-CD1LpC7v.js";import"./query-Dsl6ez7B.js";import"./router-CsQYcDjN.js";/**
+import{j as e,G as y,m as P,l as R,w as d,s as n,J as s}from"./mantine-CcsGrdCA.js";import{I as o,A as D}from"./InsightCard-Cw6N-Lr-.js";import{M as c}from"./MonacoPanel-B1hqE2-b.js";import{c as T,i as L,j as M,k as _,R as B}from"./index-DkFS7iCv.js";import{C as O}from"./copy-LQJr6bEL.js";import"./monaco-CD1LpC7v.js";import"./query-Dsl6ez7B.js";import"./router-CsQYcDjN.js";/**
  * @license lucide-react v0.468.0 - ISC
  *
  * This source code is licensed under the ISC license.

@@ -259,6 +259,19 @@ export interface ReviewResponse {
   messages: string[];
 }
 
+export interface ApplyResponse {
+  status: string;
+  artist: string;
+  album: string;
+  ratingKey: string;
+  backupCreated: boolean;
+  writeSuccessful: boolean;
+  verificationPassed: boolean;
+  auditStored: boolean;
+  message: string;
+  review: ReviewDocument;
+}
+
 export interface PreviewResponse {
   document: ReviewDocument;
 }

@@ -34,6 +34,13 @@ class ApplyAPIService:
         except Exception as exc:
             raise ReviewAPIError(str(exc) or "Unable to apply generated metadata.") from exc
 
+        if (
+            result.status != "SUCCESS"
+            or not result.write_successful
+            or not result.verification_passed
+        ):
+            raise ReviewAPIError(result.message or "Plex metadata update was not verified.")
+
         return ApplyResponse(
             status=result.status,
             artist=result.artist,
