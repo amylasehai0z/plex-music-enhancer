@@ -29,6 +29,13 @@ from plex_music_enhancer.api.models import (
 from plex_music_enhancer.api.services.configuration import ConfigurationAPIService
 from plex_music_enhancer.config import Settings
 from plex_music_enhancer.contracts import ConfigurationContract
+from plex_music_enhancer.plex.sync import (
+    PlexSyncSnapshot,
+    SyncedAlbum,
+    SyncedArtist,
+    SyncedLibrary,
+    SyncedTrack,
+)
 from plex_music_enhancer.review.debug import PROMPT_DEBUG_DUMP_PATH, REVIEW_DEBUG_LOG_PATH
 from plex_music_enhancer.services import ConfigurationService
 from plex_music_enhancer.services.configuration import PersistentConfigurationStore
@@ -232,6 +239,38 @@ def test_album_review_endpoints_use_injected_service() -> None:
     assert review.json()["content"]["rating"] == 88
 
 
+def test_artist_endpoints_use_plex_sync_snapshot() -> None:
+    """Artist endpoints should expose synchronized Plex artist aggregates."""
+    app = create_app()
+    app.dependency_overrides[get_plex_sync_service] = lambda: _FakePlexSyncService()
+    app.dependency_overrides[get_album_review_service] = lambda: _FakeAlbumReviewService()
+    client = TestClient(app)
+
+    artists = client.get("/api/v1/artists")
+    detail = client.get("/api/v1/artists/100")
+
+    assert artists.status_code == 200
+    assert artists.json() == [
+        {
+            "ratingKey": "100",
+            "title": "Nina Simone",
+            "library": "Music",
+            "albumCount": 2,
+            "trackCount": 3,
+            "summaryPresent": False,
+            "plannedAction": None,
+        }
+    ]
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["title"] == "Nina Simone"
+    assert payload["albumCount"] == 2
+    assert payload["trackCount"] == 3
+    assert [album["title"] for album in payload["albums"]] == ["Pastel Blues", "Wild Is the Wind"]
+    assert payload["tracks"] == ["Be My Husband", "Sinnerman", "Wild Is the Wind"]
+    assert payload["reviews"][0]["content"]["rating"] == 88
+
+
 def test_error_handler_maps_api_errors() -> None:
     """API errors should map to configured HTTP status codes."""
     app = create_app()
@@ -405,6 +444,85 @@ class _FakePlexSyncService:
             tracks=5200,
         )
 
+    def snapshot(self) -> PlexSyncSnapshot:
+        """Return a fake persisted sync snapshot."""
+        return PlexSyncSnapshot(
+            synced_at=datetime(2026, 1, 1, tzinfo=UTC),
+            libraries=[
+                SyncedLibrary(
+                    library_id="1",
+                    title="Music",
+                    uuid="library-uuid",
+                    scanner="Plex Music",
+                    agent="Plex Music",
+                )
+            ],
+            artists=[
+                SyncedArtist(
+                    rating_key="100",
+                    title="Nina Simone",
+                    guid="plex://artist/100",
+                    library_id="1",
+                    library_title="Music",
+                )
+            ],
+            albums=[
+                SyncedAlbum(
+                    rating_key="200",
+                    title="Pastel Blues",
+                    parent_artist="Nina Simone",
+                    guid="plex://album/200",
+                    year=1965,
+                    library_id="1",
+                    library_title="Music",
+                ),
+                SyncedAlbum(
+                    rating_key="201",
+                    title="Wild Is the Wind",
+                    parent_artist="Nina Simone",
+                    guid="plex://album/201",
+                    year=1966,
+                    library_id="1",
+                    library_title="Music",
+                ),
+            ],
+            tracks=[
+                SyncedTrack(
+                    rating_key="300",
+                    title="Be My Husband",
+                    parent_artist="Nina Simone",
+                    parent_album="Pastel Blues",
+                    guid="plex://track/300",
+                    duration=200000,
+                    index=1,
+                    library_id="1",
+                    library_title="Music",
+                ),
+                SyncedTrack(
+                    rating_key="301",
+                    title="Sinnerman",
+                    parent_artist="Nina Simone",
+                    parent_album="Pastel Blues",
+                    guid="plex://track/301",
+                    duration=600000,
+                    index=2,
+                    library_id="1",
+                    library_title="Music",
+                ),
+                SyncedTrack(
+                    rating_key="302",
+                    title="Wild Is the Wind",
+                    parent_artist="Nina Simone",
+                    parent_album="Wild Is the Wind",
+                    guid="plex://track/302",
+                    duration=420000,
+                    index=1,
+                    library_id="1",
+                    library_title="Music",
+                ),
+            ],
+        )
+
 
 class _FakeAlbumReviewService:
     """Fake structured album review service."""
@@ -416,6 +534,10 @@ class _FakeAlbumReviewService:
     def get_review(self, album_id: str) -> StoredAlbumReview:
         """Return a fake stored review."""
         return _stored_album_review(album_id=album_id)
+
+    def reviews(self) -> dict[str, StoredAlbumReview]:
+        """Return fake stored reviews."""
+        return {"200": _stored_album_review(album_id="200")}
 
     def overview(self) -> AlbumReviewOverviewResponse:
         """Return a fake review overview."""

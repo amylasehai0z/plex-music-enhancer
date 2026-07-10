@@ -265,8 +265,23 @@ class LibraryArtist(APIModel):
     rating_key: str = Field(serialization_alias="ratingKey")
     title: str
     library: str | None = None
+    album_count: int = Field(default=0, ge=0, serialization_alias="albumCount")
+    track_count: int = Field(default=0, ge=0, serialization_alias="trackCount")
     summary_present: bool = Field(default=False, serialization_alias="summaryPresent")
     planned_action: str | None = Field(default=None, serialization_alias="plannedAction")
+
+
+class LibraryArtistDetail(APIModel):
+    """Artist detail assembled from the persisted Plex sync snapshot."""
+
+    rating_key: str = Field(serialization_alias="ratingKey")
+    title: str
+    library: str | None = None
+    album_count: int = Field(default=0, ge=0, serialization_alias="albumCount")
+    track_count: int = Field(default=0, ge=0, serialization_alias="trackCount")
+    albums: list[LibraryAlbum] = Field(default_factory=list)
+    tracks: list[str] = Field(default_factory=list)
+    reviews: list[StoredAlbumReview] = Field(default_factory=list)
 
 
 class LibraryAlbum(APIModel):

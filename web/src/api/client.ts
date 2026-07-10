@@ -8,6 +8,7 @@ import type {
   DeveloperExplanation,
   LibraryAlbum,
   LibraryArtist,
+  LibraryArtistDetail,
   LogResponse,
   PlexConnectionTestResponse,
   PlexSyncStatus,
@@ -129,6 +130,10 @@ export class LibraryApi {
 
   artists(): Promise<LibraryArtist[]> {
     return this.client.get<LibraryArtist[]>("/artists");
+  }
+
+  artist(artistId: string): Promise<LibraryArtistDetail> {
+    return this.client.get<LibraryArtistDetail>(`/artists/${encodeURIComponent(artistId)}`);
   }
 
   albums(): Promise<LibraryAlbum[]> {

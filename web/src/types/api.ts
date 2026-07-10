@@ -131,6 +131,8 @@ export interface LibraryArtist {
   ratingKey: string;
   title: string;
   library?: string | null;
+  albumCount: number;
+  trackCount: number;
   summaryPresent: boolean;
   plannedAction?: string | null;
 }
@@ -143,6 +145,12 @@ export interface LibraryAlbum {
   year?: number | null;
   summaryPresent: boolean;
   plannedAction?: string | null;
+}
+
+export interface LibraryArtistDetail extends LibraryArtist {
+  albums: LibraryAlbum[];
+  tracks: string[];
+  reviews: StoredAlbumReview[];
 }
 
 export interface TokenUsage {

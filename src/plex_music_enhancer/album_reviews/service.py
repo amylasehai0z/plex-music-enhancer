@@ -222,6 +222,10 @@ class AlbumReviewService:
         ratings = [review.content.rating for review in self._review_store.load_all().values()]
         return round(sum(ratings) / len(ratings), 1) if ratings else None
 
+    def reviews(self) -> dict[str, StoredAlbumReview]:
+        """Return persisted reviews keyed by album id."""
+        return self._review_store.load_all()
+
     def _run_background(self, album_id: str) -> None:
         """Generate a review in the background and capture user-visible errors."""
         try:

@@ -42,6 +42,14 @@ export function useArtists() {
   return useQuery({ queryKey: ["artists"], queryFn: () => api.library.artists() });
 }
 
+export function useArtist(artistId: string | null) {
+  return useQuery({
+    queryKey: ["artists", artistId],
+    queryFn: () => api.library.artist(artistId ?? ""),
+    enabled: Boolean(artistId),
+  });
+}
+
 export function useAlbums() {
   return useQuery({ queryKey: ["albums"], queryFn: () => api.library.albums() });
 }
