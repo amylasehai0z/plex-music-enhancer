@@ -44,6 +44,16 @@ from plex_music_enhancer.plex.scanner import (
     PlexMusicScanner,
     PlexScannerError,
 )
+from plex_music_enhancer.plex.sync import (
+    PlexLibrarySyncService,
+    PlexSyncError,
+    PlexSyncSnapshot,
+    PlexSyncStore,
+    SyncedAlbum,
+    SyncedArtist,
+    SyncedLibrary,
+    SyncedTrack,
+)
 
 __all__ = [
     "AlbumAuditFinding",
@@ -77,6 +87,14 @@ __all__ = [
     "PlexProbeError",
     "PlexWriteProbe",
     "PlexScannerError",
+    "PlexLibrarySyncService",
+    "PlexSyncError",
+    "PlexSyncSnapshot",
+    "PlexSyncStore",
+    "SyncedAlbum",
+    "SyncedArtist",
+    "SyncedLibrary",
+    "SyncedTrack",
     "SummaryWriteCapability",
     "SummaryLanguage",
     "SummaryPresence",

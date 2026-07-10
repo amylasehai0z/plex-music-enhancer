@@ -1,19 +1,33 @@
-import { Grid, Group, Skeleton, Stack, Table, Text, Title } from "@mantine/core";
-import { Album, ClipboardCheck, Cpu, Database, Library, Server, UserRound } from "lucide-react";
+import { Alert, Button, Grid, Group, Progress, Skeleton, Stack, Table, Text, Title } from "@mantine/core";
+import { useQueryClient } from "@tanstack/react-query";
+import { Album, ClipboardCheck, Cpu, Database, Library, RefreshCw, Server, UserRound } from "lucide-react";
 
 import { MetricCard } from "../components/MetricCard";
 import { StatusPill } from "../components/StatusPill";
-import { useDashboardData, useDebugReview } from "../hooks/useApi";
+import { useDashboardData, useDebugReview, usePlexSyncMutation } from "../hooks/useApi";
 import { formatNumber } from "../utils/format";
 
 export function DashboardPage() {
-  const { statistics, providers, configuration, version } = useDashboardData();
+  const queryClient = useQueryClient();
+  const { statistics, providers, configuration, version, plexSync } = useDashboardData();
+  const syncMutation = usePlexSyncMutation();
   const reviewLog = useDebugReview();
   const stats = statistics.data;
   const config = configuration.data?.configuration;
+  const sync = plexSync.data;
   const provider = providers.data?.find((item) => item.details.type === "ai");
   const reviewSections = Object.keys(reviewLog.data?.sections ?? {});
   const userAgentData = navigator as Navigator & { userAgentData?: { platform?: string } };
+  const syncRunning = Boolean(sync?.running || syncMutation.isPending);
+
+  const startSync = () => {
+    syncMutation.mutate(undefined, {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: ["plex", "sync"] });
+        await queryClient.invalidateQueries({ queryKey: ["statistics"] });
+      },
+    });
+  };
 
   return (
     <Stack gap="lg">
@@ -55,6 +69,56 @@ export function DashboardPage() {
         </Grid>
       )}
       <Grid>
+        <Grid.Col span={{ base: 12, lg: 6 }}>
+          <section className="surface">
+            <Group justify="space-between" align="flex-start">
+              <div>
+                <Title order={2}>Plex Synchronisation</Title>
+                <Text c="dimmed" size="sm">
+                  Musikbibliotheken aus Plex lokal erfassen.
+                </Text>
+              </div>
+              <StatusPill value={Boolean(sync?.lastSync) && !sync?.error} />
+            </Group>
+            <Stack gap="sm" mt="md">
+              <Group grow>
+                <MetricCard label="Artists" value={formatNumber(sync?.artists)} icon={UserRound} />
+                <MetricCard label="Alben" value={formatNumber(sync?.albums)} icon={Album} />
+                <MetricCard label="Tracks" value={formatNumber(sync?.tracks)} icon={Library} />
+              </Group>
+              <Progress value={sync?.progress ?? 0} animated={syncRunning} />
+              <Table>
+                <Table.Tbody>
+                  <Table.Tr>
+                    <Table.Td>Status</Table.Td>
+                    <Table.Td>{syncRunning ? "Synchronisation läuft" : "Bereit"}</Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>Fortschritt</Table.Td>
+                    <Table.Td>{sync?.progress ?? 0}%</Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>Letzter Sync</Table.Td>
+                    <Table.Td>{formatSyncDate(sync?.lastSync)}</Table.Td>
+                  </Table.Tr>
+                </Table.Tbody>
+              </Table>
+              {sync?.error || syncMutation.error ? (
+                <Alert color="red">
+                  {sync?.error ?? syncMutation.error?.message ?? "Synchronisation fehlgeschlagen."}
+                </Alert>
+              ) : null}
+              <Button
+                leftSection={<RefreshCw size={16} />}
+                onClick={startSync}
+                loading={syncRunning}
+                disabled={!config?.plexConfigured}
+              >
+                Synchronisieren
+              </Button>
+            </Stack>
+          </section>
+        </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 6 }}>
           <section className="surface">
             <Title order={2}>System</Title>
@@ -126,4 +190,14 @@ export function DashboardPage() {
       </Grid>
     </Stack>
   );
+}
+
+function formatSyncDate(value?: string | null) {
+  if (!value) {
+    return "Noch nie";
+  }
+  return new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

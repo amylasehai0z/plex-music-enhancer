@@ -55,6 +55,17 @@ export interface StatisticsResponse {
   cacheEntries: number;
 }
 
+export interface PlexSyncStatus {
+  running: boolean;
+  progress: number;
+  libraries: number;
+  artists: number;
+  albums: number;
+  tracks: number;
+  lastSync?: string | null;
+  error?: string | null;
+}
+
 export interface VersionResponse {
   name: string;
   version: string;

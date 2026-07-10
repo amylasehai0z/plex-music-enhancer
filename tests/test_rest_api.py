@@ -14,6 +14,7 @@ from plex_music_enhancer.api.models import (
     ApplyResponse,
     ArtistReviewResponse,
     DebugMeta,
+    PlexSyncStatusResponse,
     PromptAnalysis,
     QualityAnalysis,
     ReviewDocument,
@@ -30,6 +31,7 @@ from plex_music_enhancer.web.app import create_app
 from plex_music_enhancer.web.dependencies import (
     get_apply_api_service,
     get_configuration_api_service,
+    get_plex_sync_service,
     get_review_api_service,
 )
 
@@ -188,6 +190,23 @@ def test_apply_endpoint() -> None:
     assert payload["verificationPassed"] is True
 
 
+def test_plex_sync_endpoints_use_injected_service() -> None:
+    """Plex sync endpoints should start and report sync status."""
+    app = create_app()
+    app.dependency_overrides[get_plex_sync_service] = lambda: _FakePlexSyncService()
+    client = TestClient(app)
+
+    started = client.post("/api/v1/plex/sync")
+    status = client.get("/api/v1/plex/sync/status")
+
+    assert started.status_code == 200
+    assert started.json()["running"] is True
+    assert started.json()["progress"] == 45
+    assert status.status_code == 200
+    assert status.json()["artists"] == 120
+    assert status.json()["tracks"] == 5200
+
+
 def test_error_handler_maps_api_errors() -> None:
     """API errors should map to configured HTTP status codes."""
     app = create_app()
@@ -333,6 +352,32 @@ class _FakeApplyService:
             review=_api_review_document(
                 target=request.target, artist=request.artist, album=request.album
             ),
+        )
+
+
+class _FakePlexSyncService:
+    """Fake Plex sync API service."""
+
+    def start(self) -> PlexSyncStatusResponse:
+        """Return fake running status."""
+        return PlexSyncStatusResponse(
+            running=True,
+            progress=45,
+            libraries=1,
+            artists=120,
+            albums=450,
+            tracks=5200,
+        )
+
+    def status(self) -> PlexSyncStatusResponse:
+        """Return fake persisted status."""
+        return PlexSyncStatusResponse(
+            running=False,
+            progress=100,
+            libraries=1,
+            artists=120,
+            albums=450,
+            tracks=5200,
         )
 
 

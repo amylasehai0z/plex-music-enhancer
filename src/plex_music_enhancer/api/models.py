@@ -292,6 +292,19 @@ class StatisticsResponse(APIModel):
     cache_entries: int = Field(default=0, ge=0, serialization_alias="cacheEntries")
 
 
+class PlexSyncStatusResponse(APIModel):
+    """Current Plex library synchronization status."""
+
+    running: bool = False
+    progress: int = Field(default=0, ge=0, le=100)
+    libraries: int = Field(default=0, ge=0)
+    artists: int = Field(default=0, ge=0)
+    albums: int = Field(default=0, ge=0)
+    tracks: int = Field(default=0, ge=0)
+    last_sync: datetime | None = Field(default=None, serialization_alias="lastSync")
+    error: str | None = None
+
+
 class ConfigurationResponse(APIModel):
     """Configuration response wrapper for future API clients."""
 

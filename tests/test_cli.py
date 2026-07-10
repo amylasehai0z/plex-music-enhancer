@@ -398,8 +398,8 @@ def test_version_command() -> None:
     result = runner.invoke(app, ["version"])
 
     assert result.exit_code == 0
-    assert __version__ == "1.0.2"
-    assert result.stdout.strip() == "plex-enhancer 1.0.2"
+    assert __version__ == "1.0.3"
+    assert result.stdout.strip() == "plex-enhancer 1.0.3"
 
 
 def test_pyproject_uses_constants_as_canonical_version_source() -> None:

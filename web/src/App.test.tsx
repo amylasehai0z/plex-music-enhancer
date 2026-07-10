@@ -52,16 +52,18 @@ function stubDashboardApi() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     const payload = url.endsWith("/statistics")
-      ? { artists: 12, albums: 34, libraries: 1, cacheEntries: 5 }
+      ? { artists: 12, albums: 34, tracks: 99, libraries: 1, cacheEntries: 5 }
       : url.endsWith("/providers")
         ? [{ name: "openai", configured: true, model: "gpt-5.5", details: { type: "ai" } }]
         : url.endsWith("/config")
           ? { configuration: { plexConfigured: true } }
-          : url.endsWith("/system/version")
-            ? { version: "1.0.0", apiVersion: "v1" }
-            : url.endsWith("/debug/review")
-              ? { exists: false, sections: {} }
-              : {};
+          : url.endsWith("/plex/sync/status")
+            ? { running: false, progress: 100, artists: 12, albums: 34, tracks: 99, lastSync: null }
+            : url.endsWith("/system/version")
+              ? { version: "1.0.0", apiVersion: "v1" }
+              : url.endsWith("/debug/review")
+                ? { exists: false, sections: {} }
+                : {};
 
     return new Response(JSON.stringify(payload), {
       status: 200,

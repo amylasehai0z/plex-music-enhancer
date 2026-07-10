@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from pydantic import SecretStr
 
 from plex_music_enhancer.ai import AIError, AIManager
@@ -13,6 +15,7 @@ from plex_music_enhancer.api.services import (
 )
 from plex_music_enhancer.apply import ApplyService
 from plex_music_enhancer.config import Settings
+from plex_music_enhancer.plex.sync import PlexLibrarySyncService
 from plex_music_enhancer.review import ReviewService
 from plex_music_enhancer.services import ConfigurationService, EnrichmentPreviewService
 
@@ -33,6 +36,12 @@ def require_plex_settings(settings: Settings | None = None) -> tuple[str, Secret
 def get_configuration_api_service() -> ConfigurationAPIService:
     """Return the configuration API service."""
     return ConfigurationAPIService(ConfigurationService())
+
+
+@lru_cache
+def get_plex_sync_service() -> PlexLibrarySyncService:
+    """Return the process-wide Plex sync service."""
+    return PlexLibrarySyncService()
 
 
 def get_review_api_service() -> ReviewAPIService:

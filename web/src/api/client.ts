@@ -8,6 +8,7 @@ import type {
   LibraryArtist,
   LogResponse,
   PlexConnectionTestResponse,
+  PlexSyncStatus,
   PromptDebugDocument,
   PromptMetaDocument,
   PreviewResponse,
@@ -141,6 +142,18 @@ export class StatisticsApi {
   }
 }
 
+export class PlexApi {
+  constructor(private readonly client: ApiClient) {}
+
+  sync(): Promise<PlexSyncStatus> {
+    return this.client.post<PlexSyncStatus>("/plex/sync", {});
+  }
+
+  syncStatus(): Promise<PlexSyncStatus> {
+    return this.client.get<PlexSyncStatus>("/plex/sync/status");
+  }
+}
+
 export class SystemApi {
   constructor(private readonly client: ApiClient) {}
 
@@ -195,6 +208,7 @@ export const api = {
   config: new ConfigApi(client),
   providers: new ProviderApi(client),
   library: new LibraryApi(client),
+  plex: new PlexApi(client),
   statistics: new StatisticsApi(client),
   system: new SystemApi(client),
   logs: new LogApi(client),

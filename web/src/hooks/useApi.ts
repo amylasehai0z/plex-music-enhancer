@@ -8,8 +8,19 @@ export function useDashboardData() {
   const providers = useQuery({ queryKey: ["providers"], queryFn: () => api.providers.list() });
   const configuration = useQuery({ queryKey: ["configuration"], queryFn: () => api.config.get() });
   const version = useQuery({ queryKey: ["system", "version"], queryFn: () => api.system.version() });
+  const plexSync = useQuery({
+    queryKey: ["plex", "sync"],
+    queryFn: () => api.plex.syncStatus(),
+    refetchInterval: (query) => (query.state.data?.running ? 1000 : false),
+  });
 
-  return { statistics, providers, configuration, version };
+  return { statistics, providers, configuration, version, plexSync };
+}
+
+export function usePlexSyncMutation() {
+  return useMutation({
+    mutationFn: () => api.plex.sync(),
+  });
 }
 
 export function useArtists() {
