@@ -1,10 +1,8 @@
 import {
-  Alert,
   Badge,
   Button,
   Checkbox,
   Group,
-  Loader,
   Menu,
   NativeSelect,
   Stack,
@@ -20,6 +18,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { StatusPill } from "../components/StatusPill";
+import {
+  CoverArt,
+  DetailMetric,
+  LibraryDetailState,
+  LibraryErrorState,
+  LibraryExplorer,
+  LibraryLoadingState,
+} from "../components/LibraryExplorer";
 import { useAlbum, useAlbumReviewGenerationMutation, useAlbums } from "../hooks/useApi";
 import type { LibraryAlbumDetail } from "../types/api";
 
@@ -99,32 +105,19 @@ export function AlbumsPage() {
   }
 
   if (albums.isLoading) {
-    return (
-      <section className="surface">
-        <Group>
-          <Loader size="sm" />
-          <Text>Alben werden geladen...</Text>
-        </Group>
-      </section>
-    );
+    return <LibraryLoadingState label="Alben werden geladen..." />;
   }
 
   if (albums.isError) {
-    return (
-      <Alert color="red" title="Alben konnten nicht geladen werden">
-        {(albums.error as Error).message}
-      </Alert>
-    );
+    return <LibraryErrorState title="Alben konnten nicht geladen werden" error={albums.error as Error} />;
   }
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <div>
-          <Title order={1}>Alben</Title>
-          <Text c="dimmed">Synchronized Plex albums with track lists and AI review status.</Text>
-        </div>
-        <Group align="flex-end">
+    <LibraryExplorer
+      title="Alben"
+      description="Synchronized Plex albums with track lists and AI review status."
+      toolbar={
+        <>
           <TextInput placeholder="Album suchen" aria-label="Album suchen" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
           <NativeSelect
             aria-label="Review-Filter"
@@ -150,9 +143,10 @@ export function AlbumsPage() {
               { value: "review", label: "Review-Status" },
             ]}
           />
-        </Group>
-      </Group>
-      <Group justify="space-between" className="selection-bar">
+        </>
+      }
+      meta={
+        <>
         <Group gap="xs">
           <Text size="sm" c="dimmed">
             {selected.length} ausgewählt · {rows.length} sichtbar
@@ -164,10 +158,10 @@ export function AlbumsPage() {
         <Button leftSection={<RefreshCw size={14} />} size="xs" variant="subtle" onClick={() => void albums.refetch()}>
           Refresh
         </Button>
-      </Group>
-      <div className="library-split-view">
-        <section className="surface table-surface">
-          <Table stickyHeader>
+        </>
+      }
+      list={
+        <Table stickyHeader>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>
@@ -205,11 +199,11 @@ export function AlbumsPage() {
                       checked={selected.includes(album.ratingKey)}
                       onChange={() => toggleSelection(album.ratingKey)}
                       onClick={(event) => event.stopPropagation()}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <AlbumCover title={album.title} coverUrl={album.coverUrl} />
-                  </Table.Td>
+                  />
+                </Table.Td>
+                <Table.Td>
+                    <CoverArt label={`${album.title} Cover`} src={album.coverUrl} />
+                </Table.Td>
                   <Table.Td>{album.title}</Table.Td>
                   <Table.Td>{album.artist}</Table.Td>
                   <Table.Td>{album.year ?? "unbekannt"}</Table.Td>
@@ -261,7 +255,8 @@ export function AlbumsPage() {
               ) : null}
             </Table.Tbody>
           </Table>
-        </section>
+      }
+      detail={
         <AlbumDetailPanel
           detail={activeAlbum.data}
           error={activeAlbum.error as Error | null}
@@ -271,8 +266,8 @@ export function AlbumsPage() {
           onOpenArtist={openArtist}
           onReview={(artist, album) => reviewAlbum(artist, album)}
         />
-      </div>
-    </Stack>
+      }
+    />
   );
 }
 
@@ -284,13 +279,6 @@ function filterLabel(filter: string) {
     return "Mit Review";
   }
   return "Alle Alben";
-}
-
-function AlbumCover({ coverUrl, title }: { coverUrl?: string | null; title: string }) {
-  if (coverUrl) {
-    return <img src={coverUrl} alt={`${title} Cover`} className="cover-image" />;
-  }
-  return <div className="cover-placeholder" aria-label={`${title} Cover nicht vorhanden`} />;
 }
 
 function AlbumDetailPanel({
@@ -310,40 +298,19 @@ function AlbumDetailPanel({
   onOpenArtist: (artist: string) => void;
   onReview: (artist: string, album: string) => void;
 }) {
-  if (loading) {
-    return (
-      <section className="surface">
-        <Group>
-          <Loader size="sm" />
-          <Text>Albumdetails werden geladen...</Text>
-        </Group>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert color="red" title="Albumdetails konnten nicht geladen werden">
-        {error.message}
-      </Alert>
-    );
-  }
-
-  if (!detail) {
-    return (
-      <section className="surface">
-        <Text c="dimmed">Wähle ein Album aus, um Details anzuzeigen.</Text>
-      </section>
-    );
-  }
-
   return (
-    <section className="surface">
-      <Stack gap="md">
-        <Group justify="space-between" align="flex-start">
-          <Group align="flex-start" wrap="nowrap">
-            <AlbumCover title={detail.title} coverUrl={detail.coverUrl} />
-            <div>
+    <LibraryDetailState
+      loading={loading}
+      loadingLabel="Albumdetails werden geladen..."
+      error={error}
+      errorTitle="Albumdetails konnten nicht geladen werden"
+      empty={<Text c="dimmed">Wähle ein Album aus, um Details anzuzeigen.</Text>}
+    >
+      {detail ? (
+        <Stack gap="md">
+          <div className="library-detail-header">
+            <CoverArt label={`${detail.title} Cover`} src={detail.coverUrl} size="lg" />
+            <div className="library-detail-title">
               <Title order={2}>{detail.title}</Title>
               <Button variant="subtle" size="compact-sm" px={0} onClick={() => onOpenArtist(detail.artist)}>
                 {detail.artist}
@@ -352,78 +319,107 @@ function AlbumDetailPanel({
                 {[detail.year ?? "Jahr unbekannt", detail.library ?? "Musikbibliothek"].join(" · ")}
               </Text>
             </div>
+            <Badge leftSection={<Disc3 size={12} />} variant="light">
+              {detail.trackCount} Tracks
+            </Badge>
+          </div>
+          <Group grow>
+            <DetailMetric label="Jahr" value={detail.year?.toString() ?? "unbekannt"} />
+            <DetailMetric label="Tracks" value={detail.trackCount.toLocaleString("de-DE")} />
+            <DetailMetric label="Review" value={detail.reviewStatus === "present" ? "vorhanden" : "fehlt"} />
           </Group>
-          <Badge leftSection={<Disc3 size={12} />} variant="light">
-            {detail.trackCount} Tracks
-          </Badge>
-        </Group>
-        <Group grow>
-          <Metric label="Jahr" value={detail.year?.toString() ?? "unbekannt"} />
-          <Metric label="Tracks" value={detail.trackCount.toLocaleString("de-DE")} />
-          <Metric label="Review" value={detail.reviewStatus === "present" ? "vorhanden" : "fehlt"} />
-        </Group>
-        <div>
-          <Text fw={700} mb="xs">
-            Genres
-          </Text>
-          <Group gap="xs">
-            {detail.genres.map((genre) => (
-              <Badge key={genre} variant="light">
-                {genre}
-              </Badge>
-            ))}
-            {!detail.genres.length ? <Text c="dimmed">Keine Genres im Sync-/Review-Kontext vorhanden.</Text> : null}
-          </Group>
-        </div>
-        <div>
-          <Text fw={700} mb="xs">
-            Trackliste
-          </Text>
-          <Stack gap={4}>
-            {detail.tracks.map((track) => (
-              <Text key={track} size="sm">
-                {track}
-              </Text>
-            ))}
-            {!detail.tracks.length ? <Text c="dimmed">Keine Tracks im Sync-Snapshot vorhanden.</Text> : null}
-          </Stack>
-        </div>
-        <div>
-          <Group justify="space-between" mb="xs">
-            <Text fw={700}>AI Review</Text>
-            <ReviewStatus status={detail.reviewStatus} />
-          </Group>
-          {detail.review ? (
+          <div>
+            <Text fw={700} mb="xs">
+              Genres
+            </Text>
+            <Group gap="xs">
+              {detail.genres.map((genre) => (
+                <Badge key={genre} variant="light">
+                  {genre}
+                </Badge>
+              ))}
+              {!detail.genres.length ? <Text c="dimmed">Keine Genres im Sync-/Review-Kontext vorhanden.</Text> : null}
+            </Group>
+          </div>
+          <div>
+            <Text fw={700} mb="xs">
+              Trackliste
+            </Text>
             <Stack gap={4}>
-              <Text size="sm">{detail.review.content.summary}</Text>
-              <Text size="sm" fw={700}>
-                {detail.review.content.rating}/100
-              </Text>
-              <Text size="sm">{detail.review.content.finalVerdict}</Text>
-              <Text size="xs" c="dimmed">
-                {detail.review.provider} · {detail.review.model}
-              </Text>
+              {detail.tracks.map((track) => (
+                <Text key={track} size="sm">
+                  {track}
+                </Text>
+              ))}
+              {!detail.tracks.length ? <Text c="dimmed">Keine Tracks im Sync-Snapshot vorhanden.</Text> : null}
             </Stack>
-          ) : (
-            <Text c="dimmed">Noch kein gespeichertes Review für dieses Album.</Text>
-          )}
-        </div>
-        <Group>
-          <Button leftSection={<Play size={16} />} variant="light" onClick={() => onReview(detail.artist, detail.title)}>
-            Review öffnen
-          </Button>
-          <Button
-            leftSection={<Sparkles size={16} />}
-            variant="subtle"
-            loading={generating}
-            disabled={detail.reviewStatus === "present" || detail.reviewStatus === "running"}
-            onClick={() => onGenerate(detail.ratingKey)}
-          >
-            Review erzeugen
-          </Button>
-        </Group>
-      </Stack>
-    </section>
+          </div>
+          <div>
+            <Group justify="space-between" mb="xs">
+              <Text fw={700}>AI Review</Text>
+              <ReviewStatus status={detail.reviewStatus} />
+            </Group>
+            {detail.review ? (
+              <Stack gap={4}>
+                <Text size="sm">{detail.review.content.summary}</Text>
+                <Text size="sm" fw={700}>
+                  {detail.review.content.rating}/100
+                </Text>
+                <Text size="sm">
+                  <Text span fw={700}>
+                    Genres:
+                  </Text>{" "}
+                  {detail.review.content.genres.join(", ") || "keine Angabe"}
+                </Text>
+                <Text size="sm">
+                  <Text span fw={700}>
+                    Strengths:
+                  </Text>{" "}
+                  {detail.review.content.strengths.join(", ") || "keine Angabe"}
+                </Text>
+                <Text size="sm">
+                  <Text span fw={700}>
+                    Weaknesses:
+                  </Text>{" "}
+                  {detail.review.content.weaknesses.join(", ") || "keine Angabe"}
+                </Text>
+                <Text size="sm">{detail.review.content.finalVerdict}</Text>
+                <Text size="xs" c="dimmed">
+                  {detail.review.provider} · {detail.review.model}
+                </Text>
+              </Stack>
+            ) : (
+              <Stack gap="xs">
+                <Text c="dimmed">Noch kein gespeichertes Review für dieses Album.</Text>
+                <Button
+                  leftSection={<Sparkles size={16} />}
+                  variant="light"
+                  loading={generating}
+                  disabled={detail.reviewStatus === "running"}
+                  onClick={() => onGenerate(detail.ratingKey)}
+                >
+                  Review generieren
+                </Button>
+              </Stack>
+            )}
+          </div>
+          <Group>
+            <Button leftSection={<Play size={16} />} variant="light" onClick={() => onReview(detail.artist, detail.title)}>
+              Review öffnen
+            </Button>
+            <Button
+              leftSection={<Sparkles size={16} />}
+              variant="subtle"
+              loading={generating}
+              disabled={detail.reviewStatus === "present" || detail.reviewStatus === "running"}
+              onClick={() => onGenerate(detail.ratingKey)}
+            >
+              Review erzeugen
+            </Button>
+          </Group>
+        </Stack>
+      ) : null}
+    </LibraryDetailState>
   );
 }
 
@@ -438,15 +434,4 @@ function ReviewStatus({ status }: { status: LibraryAlbumDetail["reviewStatus"] }
     return <Badge color="red">Fehler</Badge>;
   }
   return <Badge color="gray">fehlt</Badge>;
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric-card">
-      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-        {label}
-      </Text>
-      <Text fw={800}>{value}</Text>
-    </div>
-  );
 }

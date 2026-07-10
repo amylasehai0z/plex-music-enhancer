@@ -94,6 +94,13 @@ body {
   background: #222833;
 }
 
+.cover-image-lg,
+.cover-placeholder-lg {
+  width: 112px;
+  height: 112px;
+  border-radius: 8px;
+}
+
 .brand-lockup {
   min-height: 42px;
 }
@@ -138,6 +145,29 @@ body {
   background: #10141c;
 }
 
+.workspace-footer {
+  margin-top: 4px;
+}
+
+.activity-footer-card,
+.system-status-footer {
+  min-height: 180px;
+}
+
+.system-status-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.system-status-item {
+  min-height: 48px;
+  border: 1px solid #252a33;
+  border-radius: 8px;
+  background: #10141c;
+  padding: 10px 12px;
+}
+
 .activity-panel {
   height: 100%;
 }
@@ -151,9 +181,58 @@ body {
 
 .library-split-view {
   display: grid;
-  grid-template-columns: minmax(340px, 2fr) minmax(0, 3fr);
+  grid-template-columns: minmax(420px, 44%) minmax(0, 56%);
   gap: 16px;
   align-items: start;
+}
+
+.library-explorer-header {
+  gap: 16px;
+}
+
+.library-explorer-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.library-list-panel,
+.library-detail-panel {
+  min-height: calc(100vh - 280px);
+}
+
+.library-list-panel {
+  padding: 0;
+}
+
+.library-list-panel table {
+  min-width: 760px;
+}
+
+.library-list-panel th,
+.library-list-panel td {
+  white-space: nowrap;
+}
+
+.library-list-panel td:nth-child(3),
+.library-list-panel th:nth-child(3) {
+  min-width: 180px;
+  white-space: normal;
+}
+
+.library-detail-panel {
+  max-height: calc(100vh - 280px);
+  overflow: auto;
+}
+
+.library-detail-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.library-detail-title {
+  min-width: 0;
 }
 
 .review-hero {
@@ -233,6 +312,12 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .library-list-panel,
+  .library-detail-panel {
+    min-height: 0;
+    max-height: none;
+  }
+
   .review-sidebar {
     position: static;
     max-height: none;
@@ -240,6 +325,23 @@ body {
 }
 
 @media (max-width: 991px) {
+  .library-explorer-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .library-explorer-toolbar {
+    justify-content: flex-start;
+  }
+
+  .library-detail-header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .library-detail-header > :last-child {
+    grid-column: 1 / -1;
+  }
+
   .review-split {
     display: block;
   }

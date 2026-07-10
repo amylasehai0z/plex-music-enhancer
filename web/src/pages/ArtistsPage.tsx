@@ -1,10 +1,8 @@
 import {
-  Alert,
   Badge,
   Button,
   Checkbox,
   Group,
-  Loader,
   Menu,
   NativeSelect,
   Stack,
@@ -19,6 +17,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { StatusPill } from "../components/StatusPill";
+import {
+  CoverArt,
+  DetailMetric,
+  LibraryDetailState,
+  LibraryErrorState,
+  LibraryExplorer,
+  LibraryLoadingState,
+} from "../components/LibraryExplorer";
 import { useArtist, useArtists } from "../hooks/useApi";
 import type { LibraryArtistDetail } from "../types/api";
 
@@ -67,32 +73,19 @@ export function ArtistsPage() {
   }
 
   if (artists.isLoading) {
-    return (
-      <section className="surface">
-        <Group>
-          <Loader size="sm" />
-          <Text>Künstler werden geladen...</Text>
-        </Group>
-      </section>
-    );
+    return <LibraryLoadingState label="Künstler werden geladen..." />;
   }
 
   if (artists.isError) {
-    return (
-      <Alert color="red" title="Künstler konnten nicht geladen werden">
-        {(artists.error as Error).message}
-      </Alert>
-    );
+    return <LibraryErrorState title="Künstler konnten nicht geladen werden" error={artists.error as Error} />;
   }
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <div>
-          <Title order={1}>Künstler</Title>
-          <Text c="dimmed">Synchronized Plex artists with albums, tracks and review context.</Text>
-        </div>
-        <Group align="flex-end">
+    <LibraryExplorer
+      title="Künstler"
+      description="Synchronized Plex artists with albums, tracks and review context."
+      toolbar={
+        <>
           <TextInput placeholder="Künstler suchen" aria-label="Künstler suchen" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
           <NativeSelect
             aria-label="Bio-Filter"
@@ -117,9 +110,10 @@ export function ArtistsPage() {
               { value: "summary", label: "Bio-Status" },
             ]}
           />
-        </Group>
-      </Group>
-      <Group justify="space-between" className="selection-bar">
+        </>
+      }
+      meta={
+        <>
         <Group gap="xs">
           <Text size="sm" c="dimmed">
             {selected.length} ausgewählt · {rows.length} sichtbar
@@ -131,10 +125,10 @@ export function ArtistsPage() {
         <Button leftSection={<RefreshCw size={14} />} size="xs" variant="subtle" onClick={() => void artists.refetch()}>
           Refresh
         </Button>
-      </Group>
-      <div className="library-split-view">
-        <section className="surface table-surface">
-          <Table stickyHeader>
+        </>
+      }
+      list={
+        <Table stickyHeader>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>
@@ -174,7 +168,7 @@ export function ArtistsPage() {
                     />
                   </Table.Td>
                   <Table.Td>
-                    <div className="cover-placeholder" />
+                    <CoverArt label={`${artist.title} Cover`} />
                   </Table.Td>
                   <Table.Td>{artist.title}</Table.Td>
                   <Table.Td>{artist.albumCount}</Table.Td>
@@ -222,10 +216,11 @@ export function ArtistsPage() {
               ) : null}
             </Table.Tbody>
           </Table>
-        </section>
+      }
+      detail={
         <ArtistDetailPanel loading={activeArtist.isLoading} error={activeArtist.error as Error | null} detail={activeArtist.data} />
-      </div>
-    </Stack>
+      }
+    />
   );
 }
 
@@ -248,49 +243,32 @@ function ArtistDetailPanel({
   error: Error | null;
   loading: boolean;
 }) {
-  if (loading) {
-    return (
-      <section className="surface">
-        <Group>
-          <Loader size="sm" />
-          <Text>Künstlerdetails werden geladen...</Text>
-        </Group>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert color="red" title="Künstlerdetails konnten nicht geladen werden">
-        {error.message}
-      </Alert>
-    );
-  }
-
-  if (!detail) {
-    return (
-      <section className="surface">
-        <Text c="dimmed">Wähle einen Künstler aus, um Details anzuzeigen.</Text>
-      </section>
-    );
-  }
-
   return (
-    <section className="surface">
+    <LibraryDetailState
+      loading={loading}
+      loadingLabel="Künstlerdetails werden geladen..."
+      error={error}
+      errorTitle="Künstlerdetails konnten nicht geladen werden"
+      empty={<Text c="dimmed">Wähle einen Künstler aus, um Details anzuzeigen.</Text>}
+    >
+      {detail ? (
       <Stack gap="md">
-        <Group justify="space-between" align="flex-start">
-          <div>
+        <div className="library-detail-header">
+          <CoverArt label={`${detail.title} Cover`} size="lg" />
+          <div className="library-detail-title">
             <Title order={2}>{detail.title}</Title>
-            <Text c="dimmed">{detail.library ?? "Musikbibliothek"}</Text>
+            <Text c="dimmed" size="sm">
+              {detail.library ?? "Musikbibliothek"}
+            </Text>
           </div>
           <Badge leftSection={<Music2 size={12} />} variant="light">
             {detail.reviews.length} Reviews
           </Badge>
-        </Group>
+        </div>
         <Group grow>
-          <Metric label="Alben" value={detail.albumCount} />
-          <Metric label="Tracks" value={detail.trackCount} />
-          <Metric label="Reviews" value={detail.reviews.length} />
+          <DetailMetric label="Alben" value={detail.albumCount.toLocaleString("de-DE")} />
+          <DetailMetric label="Tracks" value={detail.trackCount.toLocaleString("de-DE")} />
+          <DetailMetric label="Reviews" value={detail.reviews.length.toLocaleString("de-DE")} />
         </Group>
         <div>
           <Text fw={700} mb="xs">
@@ -328,17 +306,7 @@ function ArtistDetailPanel({
           </Stack>
         </div>
       </Stack>
-    </section>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="metric-card">
-      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-        {label}
-      </Text>
-      <Text fw={800}>{value.toLocaleString("de-DE")}</Text>
-    </div>
+      ) : null}
+    </LibraryDetailState>
   );
 }

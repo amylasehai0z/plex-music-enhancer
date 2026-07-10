@@ -6,6 +6,7 @@ import {
   Kbd,
   NavLink,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
@@ -63,7 +64,6 @@ export function AppLayout() {
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 260, breakpoint: "sm" }}
-      aside={{ width: 320, breakpoint: "lg" }}
       padding="md"
     >
       <AppShell.Header className="topbar">
@@ -134,43 +134,64 @@ export function AppLayout() {
             variant="filled"
           />
         ))}
-        <Stack gap="xs" mt="auto" className="system-status">
-          <Text size="xs" c="dimmed" fw={700}>
-            Systemstatus
-          </Text>
-          <Group justify="space-between">
-            <Text size="xs">Plex</Text>
-            <Badge size="xs" color={plexConfigured ? "teal" : "yellow"}>
-              {plexConfigured ? "OK" : "Offen"}
-            </Badge>
-          </Group>
-          <Group justify="space-between">
-            <Text size="xs">Provider</Text>
-            <Badge size="xs" color={aiProvider?.configured ? "teal" : "yellow"}>
-              {aiProvider?.name ?? "n/a"}
-            </Badge>
-          </Group>
-          <Group justify="space-between">
-            <Text size="xs">Cache</Text>
-            <Badge size="xs" color="blue">
-              {statistics.data?.cacheEntries ?? 0}
-            </Badge>
-          </Group>
-          <Group justify="space-between">
-            <Text size="xs">Version</Text>
-            <Badge size="xs" color="gray">
-              {version.data?.version ?? "n/a"}
-            </Badge>
-          </Group>
-        </Stack>
       </AppShell.Navbar>
       <AppShell.Main className="workspace">
-        <Outlet />
+        <Stack gap="md">
+          <Outlet />
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" className="workspace-footer">
+            <section className="surface activity-footer-card">
+              <ActivityPanel />
+            </section>
+            <SystemStatusPanel
+              aiProviderConfigured={aiProvider?.configured ?? false}
+              aiProviderName={aiProvider?.name ?? "n/a"}
+              cacheEntries={statistics.data?.cacheEntries ?? 0}
+              plexConfigured={plexConfigured}
+              version={version.data?.version ?? "n/a"}
+            />
+          </SimpleGrid>
+        </Stack>
       </AppShell.Main>
-      <AppShell.Aside p="md" className="activity-aside">
-        <ActivityPanel />
-      </AppShell.Aside>
       <CommandPalette opened={opened} onClose={close} />
     </AppShell>
+  );
+}
+
+function SystemStatusPanel({
+  aiProviderConfigured,
+  aiProviderName,
+  cacheEntries,
+  plexConfigured,
+  version,
+}: {
+  aiProviderConfigured: boolean;
+  aiProviderName: string;
+  cacheEntries: number;
+  plexConfigured: boolean;
+  version: string;
+}) {
+  return (
+    <section className="surface system-status-footer">
+      <Text size="sm" c="dimmed" fw={700}>
+        Systemstatus
+      </Text>
+      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+        <StatusItem label="Plex" value={plexConfigured ? "OK" : "Offen"} color={plexConfigured ? "teal" : "yellow"} />
+        <StatusItem label="Provider" value={aiProviderName} color={aiProviderConfigured ? "teal" : "yellow"} />
+        <StatusItem label="Cache" value={cacheEntries.toLocaleString("de-DE")} color="blue" />
+        <StatusItem label="Version" value={version} color="gray" />
+      </SimpleGrid>
+    </section>
+  );
+}
+
+function StatusItem({ color, label, value }: { color: string; label: string; value: string }) {
+  return (
+    <Group justify="space-between" className="system-status-item">
+      <Text size="xs">{label}</Text>
+      <Badge size="xs" color={color}>
+        {value}
+      </Badge>
+    </Group>
   );
 }
