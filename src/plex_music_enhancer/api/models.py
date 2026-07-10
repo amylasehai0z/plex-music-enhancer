@@ -297,3 +297,31 @@ class ConfigurationResponse(APIModel):
 
     meta: ResponseMeta = Field(default_factory=ResponseMeta)
     configuration: dict[str, Any]
+
+
+class ConfigurationUpdateRequest(APIModel):
+    """Request model for persistent runtime configuration updates."""
+
+    plex_url: str | None = Field(default=None, alias="plexUrl")
+    plex_token: str | None = Field(default=None, alias="plexToken")
+    ai_provider: str | None = Field(default=None, alias="aiProvider")
+    ai_model: str | None = Field(default=None, alias="aiModel")
+    openai_api_key: str | None = Field(default=None, alias="openaiApiKey")
+    discogs_token: str | None = Field(default=None, alias="discogsToken")
+    lastfm_api_key: str | None = Field(default=None, alias="lastfmApiKey")
+
+
+class PlexConnectionTestRequest(APIModel):
+    """Request model for testing Plex connectivity without persisting secrets."""
+
+    plex_url: str | None = Field(default=None, alias="plexUrl")
+    plex_token: str | None = Field(default=None, alias="plexToken")
+
+
+class PlexConnectionTestResponse(APIModel):
+    """Sanitized Plex connectivity test response."""
+
+    ok: bool
+    status_code: int | None = Field(default=None, serialization_alias="statusCode")
+    server_name: str | None = Field(default=None, serialization_alias="serverName")
+    message: str

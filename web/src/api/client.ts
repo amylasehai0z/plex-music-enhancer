@@ -1,11 +1,13 @@
 import type {
   ApplyRequest,
+  ConfigurationUpdateRequest,
   ConfigurationResponse,
   DeveloperDoctorReport,
   DeveloperExplanation,
   LibraryAlbum,
   LibraryArtist,
   LogResponse,
+  PlexConnectionTestResponse,
   PromptDebugDocument,
   PromptMetaDocument,
   PreviewResponse,
@@ -102,8 +104,12 @@ export class ConfigApi {
     return this.client.get<ConfigurationResponse>("/config");
   }
 
-  update(configuration: Record<string, unknown>): Promise<ConfigurationResponse> {
+  update(configuration: ConfigurationUpdateRequest): Promise<ConfigurationResponse> {
     return this.client.put<ConfigurationResponse>("/config", configuration);
+  }
+
+  testPlex(configuration: ConfigurationUpdateRequest): Promise<PlexConnectionTestResponse> {
+    return this.client.post<PlexConnectionTestResponse>("/config/test-plex", configuration);
   }
 }
 

@@ -144,11 +144,20 @@ class ConfigurationContract(BaseModel):
 
     plex_configured: bool = Field(serialization_alias="plexConfigured")
     plex_url: str | None = Field(default=None, serialization_alias="plexUrl")
+    plex_token_configured: bool = Field(default=False, serialization_alias="plexTokenConfigured")
+    plex_token_masked: str | None = Field(default=None, serialization_alias="plexTokenMasked")
     ai_provider: str = Field(serialization_alias="aiProvider")
     ai_model: str = Field(serialization_alias="aiModel")
     openai_api_key_configured: bool = Field(serialization_alias="openaiApiKeyConfigured")
-    discogs_configured: bool = Field(serialization_alias="discogsConfigured")
-    lastfm_configured: bool = Field(serialization_alias="lastfmConfigured")
+    openai_api_key_masked: str | None = Field(
+        default=None, serialization_alias="openaiApiKeyMasked"
+    )
+    discogs_configured: bool = Field(default=False, serialization_alias="discogsConfigured")
+    discogs_token_masked: str | None = Field(default=None, serialization_alias="discogsTokenMasked")
+    lastfm_configured: bool = Field(default=False, serialization_alias="lastfmConfigured")
+    lastfm_api_key_masked: str | None = Field(
+        default=None, serialization_alias="lastfmApiKeyMasked"
+    )
     max_prompt_characters: int = Field(serialization_alias="maxPromptCharacters")
 
 

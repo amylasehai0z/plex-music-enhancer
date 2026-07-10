@@ -82,9 +82,14 @@ def test_configuration_service_returns_sanitized_contract() -> None:
     assert isinstance(snapshot, ConfigurationContract)
     assert exported["plexConfigured"] is True
     assert exported["plexUrl"] == "http://localhost:32400/"
+    assert exported["plexTokenConfigured"] is True
+    assert exported["plexTokenMasked"].endswith("oken")
     assert exported["aiProvider"] == "openai"
     assert exported["aiModel"] == "gpt-5.5"
     assert exported["openaiApiKeyConfigured"] is True
+    assert exported["openaiApiKeyMasked"].endswith("-key")
     assert exported["discogsConfigured"] is True
+    assert exported["discogsTokenMasked"].endswith("oken")
     assert exported["lastfmConfigured"] is True
+    assert exported["lastfmApiKeyMasked"].endswith("-key")
     assert "openai-key" not in str(exported)

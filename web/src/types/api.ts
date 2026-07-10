@@ -10,7 +10,41 @@ export interface ProviderInfo {
 }
 
 export interface ConfigurationResponse {
-  configuration: Record<string, unknown>;
+  configuration: Configuration;
+}
+
+export interface Configuration {
+  plexConfigured: boolean;
+  plexUrl?: string | null;
+  plexTokenConfigured?: boolean;
+  plexTokenMasked?: string | null;
+  aiProvider: string;
+  aiModel: string;
+  openaiApiKeyConfigured: boolean;
+  openaiApiKeyMasked?: string | null;
+  discogsConfigured: boolean;
+  discogsTokenMasked?: string | null;
+  lastfmConfigured: boolean;
+  lastfmApiKeyMasked?: string | null;
+  maxPromptCharacters: number;
+  [key: string]: unknown;
+}
+
+export interface ConfigurationUpdateRequest {
+  plexUrl?: string | null;
+  plexToken?: string | null;
+  aiProvider?: string | null;
+  aiModel?: string | null;
+  openaiApiKey?: string | null;
+  discogsToken?: string | null;
+  lastfmApiKey?: string | null;
+}
+
+export interface PlexConnectionTestResponse {
+  ok: boolean;
+  statusCode?: number | null;
+  serverName?: string | null;
+  message: string;
 }
 
 export interface StatisticsResponse {

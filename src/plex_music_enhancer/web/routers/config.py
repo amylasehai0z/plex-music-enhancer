@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends
 
-from plex_music_enhancer.api.models import ConfigurationResponse
+from plex_music_enhancer.api.models import (
+    ConfigurationResponse,
+    ConfigurationUpdateRequest,
+    PlexConnectionTestRequest,
+    PlexConnectionTestResponse,
+)
 from plex_music_enhancer.api.services.configuration import ConfigurationAPIService
 from plex_music_enhancer.web.dependencies import get_configuration_api_service
 
@@ -24,11 +29,16 @@ async def get_config(
 @router.put("", response_model=ConfigurationResponse)
 async def update_config(
     service: Annotated[ConfigurationAPIService, Depends(get_configuration_api_service)],
-    payload: Annotated[dict[str, Any] | None, Body()] = None,
+    payload: Annotated[ConfigurationUpdateRequest | None, Body()] = None,
 ) -> ConfigurationResponse:
-    """Return current configuration and echo requested updates for future persistence."""
-    response = service.configuration()
-    configuration = dict(response.configuration)
-    configuration["requestedUpdate"] = payload or {}
-    configuration["message"] = "Runtime configuration persistence is not implemented yet."
-    return ConfigurationResponse(meta=response.meta, configuration=configuration)
+    """Persist validated runtime configuration and return a sanitized snapshot."""
+    return service.update(payload or ConfigurationUpdateRequest())
+
+
+@router.post("/test-plex", response_model=PlexConnectionTestResponse)
+async def test_plex_connection(
+    service: Annotated[ConfigurationAPIService, Depends(get_configuration_api_service)],
+    payload: Annotated[PlexConnectionTestRequest | None, Body()] = None,
+) -> PlexConnectionTestResponse:
+    """Test Plex connectivity without persisting credentials."""
+    return service.test_plex_connection(payload or PlexConnectionTestRequest())

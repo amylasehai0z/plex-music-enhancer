@@ -10,7 +10,7 @@ export function DashboardPage() {
   const { statistics, providers, configuration, version } = useDashboardData();
   const reviewLog = useDebugReview();
   const stats = statistics.data;
-  const config = configuration.data?.configuration ?? {};
+  const config = configuration.data?.configuration;
   const provider = providers.data?.find((item) => item.details.type === "ai");
   const reviewSections = Object.keys(reviewLog.data?.sections ?? {});
   const userAgentData = navigator as Navigator & { userAgentData?: { platform?: string } };
@@ -63,7 +63,7 @@ export function DashboardPage() {
                 <Table.Tr>
                   <Table.Td>Plex-Verbindung</Table.Td>
                   <Table.Td>
-                    <StatusPill value={Boolean(config.plexConfigured)} />
+                    <StatusPill value={Boolean(config?.plexConfigured)} />
                   </Table.Td>
                 </Table.Tr>
                 <Table.Tr>

@@ -20,8 +20,12 @@ from plex_music_enhancer.api.models import (
     TokenUsage,
     VerificationAnalysis,
 )
+from plex_music_enhancer.api.services.configuration import ConfigurationAPIService
+from plex_music_enhancer.config import Settings
 from plex_music_enhancer.contracts import ConfigurationContract
 from plex_music_enhancer.review.debug import PROMPT_DEBUG_DUMP_PATH, REVIEW_DEBUG_LOG_PATH
+from plex_music_enhancer.services import ConfigurationService
+from plex_music_enhancer.services.configuration import PersistentConfigurationStore
 from plex_music_enhancer.web.app import create_app
 from plex_music_enhancer.web.dependencies import (
     get_apply_api_service,
@@ -57,6 +61,67 @@ def test_config_endpoint_uses_dependency_injection() -> None:
 
     assert response.status_code == 200
     assert response.json()["configuration"]["aiProvider"] == "openai"
+
+
+def test_config_update_validates_and_persists_runtime_configuration(tmp_path) -> None:
+    """Config updates should validate, persist and return only sanitized values."""
+    app = create_app()
+    store = PersistentConfigurationStore(tmp_path / ".env")
+    settings = Settings(_env_file=None)
+    app.dependency_overrides[get_configuration_api_service] = lambda: ConfigurationAPIService(
+        ConfigurationService(settings_factory=lambda: settings, store=store)
+    )
+    client = TestClient(app)
+
+    response = client.put(
+        "/api/v1/config",
+        json={
+            "plexUrl": "http://plex:32400",
+            "plexToken": "plex-token",
+            "aiProvider": "openai",
+            "aiModel": "gpt-5.5",
+            "openaiApiKey": "openai-secret",
+            "discogsToken": "discogs-secret",
+            "lastfmApiKey": "lastfm-secret",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["configuration"]
+    assert payload["plexConfigured"] is True
+    assert payload["plexTokenConfigured"] is True
+    assert payload["openaiApiKeyConfigured"] is True
+    assert payload["discogsConfigured"] is True
+    assert payload["lastfmConfigured"] is True
+    assert "openai-secret" not in str(response.json())
+    assert "plex-token" not in str(response.json())
+
+    persisted = store.path.read_text(encoding="utf-8")
+    assert "PLEX_ENHANCER_PLEX_URL=" in persisted
+    assert "PLEX_ENHANCER_AI__API_KEY=" in persisted
+
+    restarted = Settings(_env_file=store.path)
+    assert str(restarted.plex_url) == "http://plex:32400/"
+    assert restarted.plex_token is not None
+    assert restarted.ai.provider == "openai"
+    assert restarted.ai.api_key is not None
+
+
+def test_config_update_rejects_invalid_values(tmp_path) -> None:
+    """Invalid configuration updates should return a clear validation error."""
+    app = create_app()
+    store = PersistentConfigurationStore(tmp_path / ".env")
+    settings = Settings(_env_file=None)
+    app.dependency_overrides[get_configuration_api_service] = lambda: ConfigurationAPIService(
+        ConfigurationService(settings_factory=lambda: settings, store=store)
+    )
+    client = TestClient(app)
+
+    response = client.put("/api/v1/config", json={"plexUrl": "not-a-url"})
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "configuration_error"
+    assert not store.path.exists()
 
 
 def test_review_artist_endpoint() -> None:
