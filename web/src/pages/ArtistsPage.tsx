@@ -7,7 +7,6 @@ import {
   Loader,
   Menu,
   NativeSelect,
-  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -93,10 +92,11 @@ export function ArtistsPage() {
           <Title order={1}>Künstler</Title>
           <Text c="dimmed">Synchronized Plex artists with albums, tracks and review context.</Text>
         </div>
-        <Group>
+        <Group align="flex-end">
           <TextInput placeholder="Künstler suchen" aria-label="Künstler suchen" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
           <NativeSelect
-            aria-label="Filter"
+            aria-label="Bio-Filter"
+            label="Bio"
             value={filter}
             onChange={(event) => setFilter(event.currentTarget.value)}
             data={[
@@ -107,6 +107,7 @@ export function ArtistsPage() {
           />
           <NativeSelect
             aria-label="Sortierung"
+            label="Sortierung"
             value={sort}
             onChange={(event) => setSort(event.currentTarget.value)}
             data={[
@@ -119,14 +120,19 @@ export function ArtistsPage() {
         </Group>
       </Group>
       <Group justify="space-between" className="selection-bar">
-        <Text size="sm" c="dimmed">
-          {selected.length} ausgewählt · {rows.length} sichtbar
-        </Text>
+        <Group gap="xs">
+          <Text size="sm" c="dimmed">
+            {selected.length} ausgewählt · {rows.length} sichtbar
+          </Text>
+          <Badge aria-label="Aktiver Bio-Filter" variant="light">
+            {filterLabel(filter)}
+          </Badge>
+        </Group>
         <Button leftSection={<RefreshCw size={14} />} size="xs" variant="subtle" onClick={() => void artists.refetch()}>
           Refresh
         </Button>
       </Group>
-      <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="md">
+      <div className="library-split-view">
         <section className="surface table-surface">
           <Table stickyHeader>
             <Table.Thead>
@@ -210,7 +216,7 @@ export function ArtistsPage() {
               {!rows.length ? (
                 <Table.Tr>
                   <Table.Td colSpan={7}>
-                    <Text c="dimmed">Keine Künstler für diese Ansicht gefunden.</Text>
+                    <Text c="dimmed">Keine Künstler gefunden.</Text>
                   </Table.Td>
                 </Table.Tr>
               ) : null}
@@ -218,9 +224,19 @@ export function ArtistsPage() {
           </Table>
         </section>
         <ArtistDetailPanel loading={activeArtist.isLoading} error={activeArtist.error as Error | null} detail={activeArtist.data} />
-      </SimpleGrid>
+      </div>
     </Stack>
   );
+}
+
+function filterLabel(filter: string) {
+  if (filter === "missing") {
+    return "Ohne Bio";
+  }
+  if (filter === "present") {
+    return "Mit Bio";
+  }
+  return "Alle Künstler";
 }
 
 function ArtistDetailPanel({

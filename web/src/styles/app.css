@@ -141,6 +141,13 @@ body {
   padding: 8px 12px;
 }
 
+.library-split-view {
+  display: grid;
+  grid-template-columns: minmax(340px, 2fr) minmax(0, 3fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .review-hero {
   min-height: 128px;
   border-color: #252a33;
@@ -214,6 +221,10 @@ body {
 }
 
 @media (max-width: 1199px) {
+  .library-split-view {
+    grid-template-columns: 1fr;
+  }
+
   .review-sidebar {
     position: static;
     max-height: none;

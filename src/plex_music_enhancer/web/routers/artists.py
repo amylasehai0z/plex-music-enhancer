@@ -73,6 +73,7 @@ async def get_artist(
         library=artist.library_title,
         album_count=len(albums),
         track_count=len(tracks),
+        summary_present=artist.summary_present,
         albums=albums,
         tracks=tracks,
         reviews=reviews,
@@ -97,7 +98,7 @@ def _artist_entry(snapshot: PlexSyncSnapshot, artist: SyncedArtist) -> LibraryAr
         library=artist.library_title,
         album_count=len(albums),
         track_count=len(tracks),
-        summary_present=False,
+        summary_present=artist.summary_present,
     )
 
 

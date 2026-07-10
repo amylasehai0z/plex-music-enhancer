@@ -75,7 +75,7 @@ function stubArtistsApi() {
         library: "Music",
         albumCount: 8,
         trackCount: 98,
-        summaryPresent: false,
+        summaryPresent: true,
         plannedAction: null,
         albums: [
           {
@@ -84,7 +84,7 @@ function stubArtistsApi() {
             artist: "ABBA",
             library: "Music",
             year: 1976,
-            summaryPresent: false,
+            summaryPresent: true,
             plannedAction: null,
           },
         ],
@@ -109,7 +109,7 @@ function stubArtistsApi() {
           library: "Music",
           albumCount: 8,
           trackCount: 98,
-          summaryPresent: false,
+          summaryPresent: true,
           plannedAction: null,
         },
       ]);
@@ -164,5 +164,46 @@ describe("ArtistsPage", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/artists", undefined);
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/artists/100", undefined);
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/artists/101", undefined);
+  });
+
+  it("filters artists by biography status", async () => {
+    stubArtistsApi();
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Künstler" })).toBeInTheDocument();
+    expect(await screen.findByText("Nina Simone")).toBeInTheDocument();
+    expect(screen.getAllByText("ABBA").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Aktiver Bio-Filter")).toHaveTextContent("Alle Künstler");
+
+    fireEvent.change(screen.getByLabelText("Bio-Filter"), {
+      target: { value: "missing" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Aktiver Bio-Filter")).toHaveTextContent("Ohne Bio");
+    });
+    expect(screen.getByText("Nina Simone")).toBeInTheDocument();
+    expect(screen.queryByText("ABBA")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Bio-Filter"), {
+      target: { value: "present" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Aktiver Bio-Filter")).toHaveTextContent("Mit Bio");
+    });
+    expect(screen.getAllByText("ABBA").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Nina Simone")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Bio-Filter"), {
+      target: { value: "all" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Aktiver Bio-Filter")).toHaveTextContent("Alle Künstler");
+    });
+    expect(screen.getByText("Nina Simone")).toBeInTheDocument();
+    expect(screen.getAllByText("ABBA").length).toBeGreaterThan(0);
   });
 });

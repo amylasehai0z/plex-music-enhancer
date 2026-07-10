@@ -42,6 +42,7 @@ class SyncedArtist(BaseModel):
     rating_key: str = Field(serialization_alias="ratingKey")
     title: str
     guid: str | None = None
+    summary_present: bool = Field(default=False, serialization_alias="summaryPresent")
     library_id: str = Field(serialization_alias="libraryId")
     library_title: str = Field(serialization_alias="libraryTitle")
 
@@ -311,6 +312,7 @@ def _artist_item(artist: Any, *, library_id: str, library_title: str) -> SyncedA
         rating_key=_string(getattr(artist, "ratingKey", "")),
         title=_string(getattr(artist, "title", "Untitled")),
         guid=_optional_string(getattr(artist, "guid", None)),
+        summary_present=bool(_optional_string(getattr(artist, "summary", None))),
         library_id=library_id,
         library_title=library_title,
     )

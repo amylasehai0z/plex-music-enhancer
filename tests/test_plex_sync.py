@@ -44,6 +44,7 @@ class FakeArtist:
         self.ratingKey = "100"
         self.title = "Nina Simone"
         self.guid = "plex://artist/100"
+        self.summary = "An influential artist biography."
 
 
 class FakeMusicSection:
@@ -125,6 +126,9 @@ def test_plex_sync_persists_music_library_snapshot(monkeypatch, tmp_path: Path) 
     assert persisted_status.artists == 1
     assert persisted_status.albums == 2
     assert persisted_status.tracks == 3
+    snapshot = restarted.snapshot()
+    assert snapshot is not None
+    assert snapshot.artists[0].summary_present is True
 
 
 def test_plex_sync_reports_failures_without_exposing_token(monkeypatch, tmp_path: Path) -> None:
