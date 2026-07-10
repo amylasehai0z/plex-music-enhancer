@@ -6,8 +6,6 @@ import {
   Kbd,
   NavLink,
   Select,
-  SimpleGrid,
-  Stack,
   Switch,
   Text,
   TextInput,
@@ -32,9 +30,8 @@ import {
 } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import { ActivityPanel } from "../components/ActivityPanel";
 import { CommandPalette } from "../components/CommandPalette";
-import { useDashboardData } from "../hooks/useApi";
+import { useProviders } from "../hooks/useApi";
 import { useDeveloperMode } from "../stores/developerMode";
 
 const navItems = [
@@ -55,8 +52,7 @@ export function AppLayout() {
   const [opened, { open, close }] = useDisclosure(false);
   const { enabled, toggle } = useDeveloperMode();
   const { setColorScheme } = useMantineColorScheme();
-  const { configuration, providers, statistics, version } = useDashboardData();
-  const plexConfigured = Boolean(configuration.data?.configuration.plexConfigured);
+  const providers = useProviders();
   const aiProvider = providers.data?.find((item) => item.details.type === "ai");
   useHotkeys([["mod+K", open]]);
 
@@ -136,62 +132,9 @@ export function AppLayout() {
         ))}
       </AppShell.Navbar>
       <AppShell.Main className="workspace">
-        <Stack gap="md">
-          <Outlet />
-          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" className="workspace-footer">
-            <section className="surface activity-footer-card">
-              <ActivityPanel />
-            </section>
-            <SystemStatusPanel
-              aiProviderConfigured={aiProvider?.configured ?? false}
-              aiProviderName={aiProvider?.name ?? "n/a"}
-              cacheEntries={statistics.data?.cacheEntries ?? 0}
-              plexConfigured={plexConfigured}
-              version={version.data?.version ?? "n/a"}
-            />
-          </SimpleGrid>
-        </Stack>
+        <Outlet />
       </AppShell.Main>
       <CommandPalette opened={opened} onClose={close} />
     </AppShell>
-  );
-}
-
-function SystemStatusPanel({
-  aiProviderConfigured,
-  aiProviderName,
-  cacheEntries,
-  plexConfigured,
-  version,
-}: {
-  aiProviderConfigured: boolean;
-  aiProviderName: string;
-  cacheEntries: number;
-  plexConfigured: boolean;
-  version: string;
-}) {
-  return (
-    <section className="surface system-status-footer">
-      <Text size="sm" c="dimmed" fw={700}>
-        Systemstatus
-      </Text>
-      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
-        <StatusItem label="Plex" value={plexConfigured ? "OK" : "Offen"} color={plexConfigured ? "teal" : "yellow"} />
-        <StatusItem label="Provider" value={aiProviderName} color={aiProviderConfigured ? "teal" : "yellow"} />
-        <StatusItem label="Cache" value={cacheEntries.toLocaleString("de-DE")} color="blue" />
-        <StatusItem label="Version" value={version} color="gray" />
-      </SimpleGrid>
-    </section>
-  );
-}
-
-function StatusItem({ color, label, value }: { color: string; label: string; value: string }) {
-  return (
-    <Group justify="space-between" className="system-status-item">
-      <Text size="xs">{label}</Text>
-      <Badge size="xs" color={color}>
-        {value}
-      </Badge>
-    </Group>
   );
 }

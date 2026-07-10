@@ -88,6 +88,8 @@ describe("DashboardPage", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Plex Synchronisation" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Systemstatus" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Aktivität" })).toBeInTheDocument();
     expect(await screen.findByText("5.200")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Synchronisieren" }));

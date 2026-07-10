@@ -3,7 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import type { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { AppLayout } from "./layouts/AppLayout";
+import { DeveloperModeProvider } from "./stores/developerMode";
 
 type MemoryRouter = ReturnType<typeof createMemoryRouter>;
 type MemoryRouterOptions = Parameters<typeof createMemoryRouter>[1];
@@ -114,5 +118,34 @@ describe("App navigation", () => {
     expect(within(sidebar as HTMLElement).getByText("Alben")).toBeInTheDocument();
     expect(within(sidebar as HTMLElement).getByText("Prompt Debug")).toBeInTheDocument();
     expect(within(sidebar as HTMLElement).getByText("Developer")).toBeInTheDocument();
+  });
+
+  it.each([
+    { path: "/artists", content: "Künstler Inhalt" },
+    { path: "/albums", content: "Alben Inhalt" },
+  ])("does not render dashboard status cards on $path", async ({ content, path }) => {
+    stubDashboardApi();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MantineProvider>
+        <QueryClientProvider client={queryClient}>
+          <DeveloperModeProvider>
+            <MemoryRouter initialEntries={[path]}>
+              <Routes>
+                <Route path="/" element={<AppLayout />}>
+                  <Route path="artists" element={<div>Künstler Inhalt</div>} />
+                  <Route path="albums" element={<div>Alben Inhalt</div>} />
+                </Route>
+              </Routes>
+            </MemoryRouter>
+          </DeveloperModeProvider>
+        </QueryClientProvider>
+      </MantineProvider>,
+    );
+
+    expect(await screen.findByText(content)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Aktivität" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Systemstatus" })).not.toBeInTheDocument();
   });
 });

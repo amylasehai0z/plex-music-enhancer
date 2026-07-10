@@ -17,6 +17,10 @@ export function useDashboardData() {
   return { statistics, providers, configuration, version, plexSync };
 }
 
+export function useProviders() {
+  return useQuery({ queryKey: ["providers"], queryFn: () => api.providers.list() });
+}
+
 export function usePlexSyncMutation() {
   return useMutation({
     mutationFn: () => api.plex.sync(),

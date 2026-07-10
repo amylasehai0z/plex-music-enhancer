@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Clock3, Info } from "lucide-react";
 
 import { useDashboardData, useDebugReview } from "../hooks/useApi";
 
-export function ActivityPanel() {
+export function ActivityPanel({ compact = false }: { compact?: boolean }) {
   const { statistics, providers, configuration } = useDashboardData();
   const review = useDebugReview();
   const plexConfigured = Boolean(configuration.data?.configuration.plexConfigured);
@@ -42,7 +42,7 @@ export function ActivityPanel() {
             Live
           </Badge>
         </Group>
-        <ScrollArea h="calc(100vh - 150px)" type="hover">
+        <ScrollArea h={compact ? 220 : "calc(100vh - 150px)"} type="hover">
           <Timeline active={items.length - 1} bulletSize={22} lineWidth={2}>
             {items.map((item) => (
               <Timeline.Item
@@ -74,7 +74,7 @@ export function ActivityPanel() {
               </Text>
             </Group>
             <Text size="xs" c="dimmed">
-              Die Seitenleiste liest vorhandene Status-, Provider- und Debug-Endpunkte.
+              Die Aktivitätskarte liest vorhandene Status-, Provider- und Debug-Endpunkte.
             </Text>
           </Stack>
         </ScrollArea>

@@ -2,21 +2,20 @@ import { Alert, Button, Grid, Group, Progress, Skeleton, Stack, Table, Text, Tit
 import { useQueryClient } from "@tanstack/react-query";
 import { Album, ClipboardCheck, Cpu, Database, Library, RefreshCw, Server, Star, UserRound } from "lucide-react";
 
+import { ActivityPanel } from "../components/ActivityPanel";
 import { MetricCard } from "../components/MetricCard";
 import { StatusPill } from "../components/StatusPill";
-import { useDashboardData, useDebugReview, usePlexSyncMutation } from "../hooks/useApi";
+import { useDashboardData, usePlexSyncMutation } from "../hooks/useApi";
 import { formatNumber } from "../utils/format";
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
   const { statistics, providers, configuration, version, plexSync } = useDashboardData();
   const syncMutation = usePlexSyncMutation();
-  const reviewLog = useDebugReview();
   const stats = statistics.data;
   const config = configuration.data?.configuration;
   const sync = plexSync.data;
   const provider = providers.data?.find((item) => item.details.type === "ai");
-  const reviewSections = Object.keys(reviewLog.data?.sections ?? {});
   const userAgentData = navigator as Navigator & { userAgentData?: { platform?: string } };
   const syncRunning = Boolean(sync?.running || syncMutation.isPending);
 
@@ -128,7 +127,7 @@ export function DashboardPage() {
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 6 }}>
           <section className="surface">
-            <Title order={2}>System</Title>
+            <Title order={2}>Systemstatus</Title>
             <Table>
               <Table.Tbody>
                 <Table.Tr>
@@ -170,28 +169,8 @@ export function DashboardPage() {
           </section>
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 6 }}>
-          <section className="surface">
-            <Title order={2}>Letzte Aktivität</Title>
-            <Table>
-              <Table.Tbody>
-                <Table.Tr>
-                  <Table.Td>Letzter Review</Table.Td>
-                  <Table.Td>{reviewLog.data?.exists ? "Debug-Log vorhanden" : "Noch keiner"}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>Review-Abschnitte</Table.Td>
-                  <Table.Td>{reviewSections.length}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>Letzte Änderungen</Table.Td>
-                  <Table.Td>Über vorhandene API nicht versioniert</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>Fehler / Warnungen</Table.Td>
-                  <Table.Td>{reviewLog.isError ? "Debug-Log nicht erreichbar" : "Keine gemeldet"}</Table.Td>
-                </Table.Tr>
-              </Table.Tbody>
-            </Table>
+          <section className="surface activity-footer-card">
+            <ActivityPanel compact />
           </section>
         </Grid.Col>
       </Grid>
