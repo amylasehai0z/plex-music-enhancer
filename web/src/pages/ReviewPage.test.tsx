@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
+import { DeveloperModeProvider } from "../stores/developerMode";
 import { ReviewPage } from "./ReviewPage";
 
 vi.mock("@monaco-editor/react", () => ({
@@ -18,7 +20,11 @@ function renderPage() {
     <MantineProvider>
       <Notifications />
       <QueryClientProvider client={queryClient}>
-        <ReviewPage />
+        <DeveloperModeProvider>
+          <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+            <ReviewPage />
+          </MemoryRouter>
+        </DeveloperModeProvider>
       </QueryClientProvider>
     </MantineProvider>,
   );
@@ -103,7 +109,9 @@ describe("ReviewPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /review erzeugen/i }));
 
-    expect(await screen.findByDisplayValue("Neu")).toBeInTheDocument();
-    expect(screen.getByText("Prompt Budget")).toBeInTheDocument();
+    expect(await screen.findByText("Neu")).toBeInTheDocument();
+    expect(screen.getByText("Aktuelle Plex-Beschreibung")).toBeInTheDocument();
+    expect(screen.getByText("Neu generierte Beschreibung")).toBeInTheDocument();
+    expect(screen.getByText("Analyse")).toBeInTheDocument();
   });
 });

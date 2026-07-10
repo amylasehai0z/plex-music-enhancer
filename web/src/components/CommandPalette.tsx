@@ -8,6 +8,9 @@ const commands = [
   { label: "Alben anzeigen", path: "/albums" },
   { label: "Review starten", path: "/reviews" },
   { label: "Prompt Debug öffnen", path: "/prompt-debug" },
+  { label: "Live Log öffnen", path: "/live-log" },
+  { label: "Developer öffnen", path: "/developer" },
+  { label: "REST Explorer öffnen", path: "/rest-explorer" },
   { label: "Einstellungen öffnen", path: "/settings" },
 ];
 

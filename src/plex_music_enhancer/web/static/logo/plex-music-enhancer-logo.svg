@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Plex Music Enhancer Logo</title>
+  <desc id="desc">Circular mark with a stylized play symbol.</desc>
+
+  <defs>
+    <linearGradient id="g" x1="36" y1="28" x2="220" y2="228" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#197278"/>
+      <stop offset="1" stop-color="#1F4E79"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="42" fill="#F5F7FA"/>
+
+  <circle cx="128" cy="128" r="86" fill="url(#g)"/>
+
+  <path d="M107 82L178 128L107 174V82Z" fill="#E3C74A"/>
+</svg>

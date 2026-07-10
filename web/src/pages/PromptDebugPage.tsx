@@ -1,12 +1,15 @@
-import { Button, Group, Tabs, Text, Title } from "@mantine/core";
+import { Button, Grid, Group, Tabs, Text, Title } from "@mantine/core";
 import { Copy, Download, RefreshCw } from "lucide-react";
 
+import { AnalysisCard } from "../components/AnalysisCard";
+import { InsightCard } from "../components/InsightCard";
 import { MonacoPanel } from "../components/MonacoPanel";
-import { usePromptLog, useReviewLog } from "../hooks/useApi";
+import { useDebugMeta, useDebugPrompt, useDebugReview } from "../hooks/useApi";
 
 export function PromptDebugPage() {
-  const prompt = usePromptLog();
-  const review = useReviewLog();
+  const prompt = useDebugPrompt();
+  const meta = useDebugMeta();
+  const review = useDebugReview();
 
   function download(filename: string, content: string) {
     const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
@@ -22,10 +25,18 @@ export function PromptDebugPage() {
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={1}>Prompt Debug</Title>
-          <Text c="dimmed">Temporäre Debug-Dateien aus dem Backend.</Text>
+          <Text c="dimmed">Prompt, Meta-Daten und Review-Log aus dem Backend.</Text>
         </div>
         <Group>
-          <Button leftSection={<RefreshCw size={16} />} variant="light" onClick={() => void prompt.refetch()}>
+          <Button
+            leftSection={<RefreshCw size={16} />}
+            variant="light"
+            onClick={() => {
+              void prompt.refetch();
+              void meta.refetch();
+              void review.refetch();
+            }}
+          >
             Refresh
           </Button>
           <Button
@@ -44,6 +55,20 @@ export function PromptDebugPage() {
           </Button>
         </Group>
       </Group>
+      <Grid mb="md">
+        <Grid.Col span={{ base: 12, md: 3 }}>
+          <InsightCard title="Zeichen" value={prompt.data?.stats.characters ?? "n/a"} />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 3 }}>
+          <InsightCard title="Tokens" value={prompt.data?.stats.estimatedTokens ?? "n/a"} />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 3 }}>
+          <InsightCard title="Budget" value={prompt.data?.stats.budget ?? "n/a"} />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 3 }}>
+          <InsightCard title="Prompt-Version" value={prompt.data?.stats.promptVersion ?? "n/a"} />
+        </Grid.Col>
+      </Grid>
       <Tabs defaultValue="prompt">
         <Tabs.List>
           <Tabs.Tab value="prompt">Prompt</Tabs.Tab>
@@ -56,12 +81,19 @@ export function PromptDebugPage() {
         <Tabs.Panel value="meta" pt="md">
           <MonacoPanel
             title="/tmp/openai_prompt_meta.json"
-            value={JSON.stringify(prompt.data?.metadata ?? {}, null, 2)}
+            value={JSON.stringify(meta.data?.payload ?? {}, null, 2)}
             language="json"
           />
         </Tabs.Panel>
         <Tabs.Panel value="review" pt="md">
           <MonacoPanel title={review.data?.path ?? "/tmp/plex_review.log"} value={review.data?.content} />
+          <Grid mt="md">
+            {Object.entries(review.data?.sections ?? {}).map(([title, content]) => (
+              <Grid.Col key={title} span={{ base: 12, md: 6 }}>
+                <AnalysisCard title={title} data={content.slice(0, 1200)} />
+              </Grid.Col>
+            ))}
+          </Grid>
         </Tabs.Panel>
       </Tabs>
     </>

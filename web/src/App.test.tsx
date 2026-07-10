@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import { DeveloperModeProvider } from "./stores/developerMode";
 
 vi.mock("@monaco-editor/react", () => ({
   Editor: () => <div>Editor</div>,
@@ -16,7 +17,9 @@ describe("App navigation", () => {
     render(
       <MantineProvider>
         <QueryClientProvider client={queryClient}>
-          <App />
+          <DeveloperModeProvider>
+            <App />
+          </DeveloperModeProvider>
         </QueryClientProvider>
       </MantineProvider>,
     );
@@ -26,5 +29,6 @@ describe("App navigation", () => {
     expect(screen.getByText("Künstler")).toBeInTheDocument();
     expect(screen.getByText("Alben")).toBeInTheDocument();
     expect(screen.getByText("Prompt Debug")).toBeInTheDocument();
+    expect(screen.getByText("Developer")).toBeInTheDocument();
   });
 });

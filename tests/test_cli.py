@@ -67,6 +67,14 @@ from plex_music_enhancer.services import (
 runner = CliRunner()
 
 
+def test_serve_help_documents_default_port_8080() -> None:
+    result = runner.invoke(app, ["serve", "--help"])
+
+    assert result.exit_code == 0
+    assert "[default: 8080]" in result.stdout
+    assert "PLEX_ENHANCER_WEB__PORT" in result.stdout
+
+
 def _metadata_document() -> AlbumMetadataDocument:
     return AlbumMetadataDocument(
         plex=PlexAlbumMetadata(

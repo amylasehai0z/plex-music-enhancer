@@ -29,14 +29,27 @@ export function MonacoPanel({
           original={original ?? ""}
           modified={modified ?? ""}
           language={language}
-          options={{ readOnly: true, minimap: { enabled: false }, renderSideBySide: true }}
+          options={{
+            readOnly: true,
+            minimap: { enabled: false },
+            renderSideBySide: true,
+            diffWordWrap: "on",
+            wordWrap: "on",
+            scrollBeyondLastLine: false,
+          }}
         />
       ) : (
         <Editor
           height={height}
           value={value ?? ""}
           language={language}
-          options={{ readOnly: true, minimap: { enabled: false }, wordWrap: "on" }}
+          options={{
+            readOnly: true,
+            minimap: { enabled: false },
+            wordWrap: "on",
+            scrollBeyondLastLine: false,
+            find: { addExtraSpaceOnTop: false },
+          }}
         />
       )}
     </Paper>

@@ -2,13 +2,22 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["**"]
+    tags: ["v*.*.*"]
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  IMAGE_NAME: ghcr.io/amylasehai0z/plex-music-enhancer
+
 jobs:
   test:
-    name: Python ${{ matrix.python-version }}
+    name: Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -25,20 +34,114 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install package
-        run: python -m pip install --upgrade pip && python -m pip install ".[dev]"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
-      - name: Lint
+      - name: Install Python package
+        run: python -m pip install --upgrade pip && python -m pip install ".[dev,web,ai,metadata]"
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Ruff
         run: ruff check .
 
-      - name: Format check
+      - name: Black
         run: black --check .
 
-      - name: Test
+      - name: Pytest
         run: pytest --cov
+
+      - name: Frontend tests
+        working-directory: web
+        run: npm test
+
+      - name: Frontend build
+        working-directory: web
+        run: npm run build
 
       - name: Build package
         run: python -m build
 
       - name: Check package metadata
         run: python -m twine check dist/*
+
+  docker:
+    name: Build, smoke test and publish container
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=main,enable={{is_default_branch}}
+            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Capture build timestamp
+        id: build-date
+        run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: plex-music-enhancer:smoke
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            REVISION=${{ github.sha }}
+            CREATED=${{ steps.build-date.outputs.created }}
+          cache-from: type=gha
+
+      - name: Smoke test container command
+        run: docker run --rm --entrypoint plex-enhancer plex-music-enhancer:smoke --help
+
+      - name: Smoke test web command
+        run: docker run --rm --entrypoint plex-enhancer plex-music-enhancer:smoke serve --help
+
+      - name: Build and push multi-arch Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: true
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            REVISION=${{ github.sha }}
+            CREATED=${{ steps.build-date.outputs.created }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

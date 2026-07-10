@@ -74,6 +74,7 @@ plex-enhancer doctor
 - [KI-Erzeugung](ai-generation.md)
 - [Review-System](review-system.md)
 - [Cache](cache.md)
+- [Docker, GHCR, Portainer und Synology](docker.md)
 - [Problembehebung](troubleshooting.md)
 - [FAQ](faq.md)
 - [Glossar](glossary.md)
@@ -93,4 +94,3 @@ plex-enhancer doctor
 4. Ein einzelnes Album mit `preview` testen.
 5. Mit `review` den Text ansehen.
 6. Erst danach `apply` verwenden.
-

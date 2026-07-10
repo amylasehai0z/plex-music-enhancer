@@ -58,11 +58,13 @@ Optionen:
 | Option | Bedeutung |
 | --- | --- |
 | `--host TEXT` | Host-Interface, Standard `127.0.0.1` |
-| `--port INTEGER` | Port, Standard `1008`; auch über `PLEX_ENHANCER_WEB__PORT` setzbar |
+| `--port INTEGER` | Port, Standard `8080`; auch über `PLEX_ENHANCER_WEB__PORT` setzbar |
 | `--reload` | Uvicorn-Reload für lokale Entwicklung |
 
-Die Weboberfläche ist unter `http://127.0.0.1:1008/` erreichbar. Swagger UI ist
-unter `http://127.0.0.1:1008/api/v1/docs` erreichbar.
+Die Weboberfläche ist unter `http://127.0.0.1:8080/` erreichbar. Swagger UI ist
+unter `http://127.0.0.1:8080/api/v1/docs` erreichbar. Container-Installationen
+können später weiterhin einen Host-Port wie `1008` auf den internen Port `8080`
+mappen.
 
 ## 5.5 `login`
 

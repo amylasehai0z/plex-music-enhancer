@@ -12,6 +12,7 @@ from plex_music_enhancer.web.routers import (
     apply,
     artists,
     config,
+    debug,
     library,
     logs,
     preview,
@@ -52,10 +53,14 @@ def create_app():
     app.include_router(apply.router, prefix=f"{prefix}/apply", tags=["apply"])
     app.include_router(statistics.router, prefix=f"{prefix}/statistics", tags=["statistics"])
     app.include_router(logs.router, prefix=f"{prefix}/logs", tags=["logs"])
+    app.include_router(debug.router, prefix=f"{prefix}/debug", tags=["debug"])
     static_dir = Path(__file__).resolve().parent / "static"
     index_path = static_dir / "index.html"
     if index_path.exists():
         app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="frontend-assets")
+        logo_dir = static_dir / "logo"
+        if logo_dir.exists():
+            app.mount("/logo", StaticFiles(directory=logo_dir), name="frontend-logo")
 
         @app.get("/", include_in_schema=False)
         async def frontend_index() -> FileResponse:

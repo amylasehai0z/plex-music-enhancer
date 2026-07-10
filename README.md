@@ -1,5 +1,10 @@
 # Plex Music Enhancer
 
+[![CI](https://github.com/amylasehai0z/plex-music-enhancer/actions/workflows/ci.yml/badge.svg)](https://github.com/amylasehai0z/plex-music-enhancer/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=github)](https://github.com/amylasehai0z/plex-music-enhancer/pkgs/container/plex-music-enhancer)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Plex Music Enhancer is a production-grade, safe, review-first command line tool for improving Plex music metadata with AI-assisted, metadata-driven German album and artist descriptions.
 
 It combines Plex library data, external music providers, a Knowledge Builder, GPT-5.5, an Editorial Style Engine, metadata verification, and a controlled Review & Apply workflow. The goal is simple: better Plex music descriptions without uncontrolled writes or invented facts.
@@ -13,6 +18,7 @@ It combines Plex library data, external music providers, a Knowledge Builder, GP
 - AI & Editorial Pipeline – `docs/editorial.md`
 - Backend API – `docs/backend-api.md`
 - Web Interface – `docs/web-ui.md`
+- Docker, Portainer & Synology – `docs/docker.md`
 - Web Architecture – `docs/web-architecture.md`
 - Developer Mode – `docs/developer-mode.md`
 - Troubleshooting – `docs/troubleshooting.md`
@@ -278,8 +284,59 @@ pre-commit install
 Docker example:
 
 ```bash
-docker compose run --rm plex-music-enhancer doctor
+docker compose up -d
 ```
+
+The container image is published to GitHub Container Registry:
+
+```text
+ghcr.io/amylasehai0z/plex-music-enhancer
+```
+
+Images are built for `linux/amd64` and `linux/arm64`, so the same image can run
+on Intel/AMD hosts and ARM-based Synology systems.
+Published images include OCI metadata, SBOM and provenance attestations.
+
+Common tags:
+
+| Tag | Purpose |
+| --- | --- |
+| `latest` | current default branch image |
+| `main` | current `main` branch image |
+| `develop` | optional integration branch image |
+| `v1.0.0` | immutable release image |
+
+The container listens on port `8080`; the default compose setup maps host port
+`1008` to container port `8080`. Persistent folders are mounted at `/config`,
+`/cache`, `/logs` and optionally `/music`.
+
+Portainer is the recommended Docker management interface. Import
+`docker-compose.yml` as a Portainer Stack or create a single container from the
+GHCR image, then configure volumes, environment variables, port mapping and the
+healthcheck in Portainer.
+
+Recommended deployment workflow:
+
+```text
+Git Push
+↓
+GitHub Actions
+↓
+Tests
+↓
+Docker Image Build
+↓
+Push to GHCR
+↓
+Portainer
+↓
+Pull the new image
+↓
+Restart the container
+```
+
+Image updates are intentionally manual. The user decides in Portainer when a new
+image is pulled, applied or rolled back to an older GHCR tag.
 
 ## Web Interface and REST API
 
@@ -290,16 +347,27 @@ python -m pip install ".[web]"
 plex-enhancer serve
 ```
 
-The default URL is `http://127.0.0.1:1008/`. OpenAPI documentation is available at:
+The default URL is `http://127.0.0.1:8080/`. OpenAPI documentation is available at:
 
-- Swagger UI: `http://127.0.0.1:1008/api/v1/docs`
-- ReDoc: `http://127.0.0.1:1008/api/v1/redoc`
-- OpenAPI JSON: `http://127.0.0.1:1008/api/v1/openapi.json`
+- Swagger UI: `http://127.0.0.1:8080/api/v1/docs`
+- ReDoc: `http://127.0.0.1:8080/api/v1/redoc`
+- OpenAPI JSON: `http://127.0.0.1:8080/api/v1/openapi.json`
+
+For container deployments, a host port such as `1008` can still be mapped to
+container port `8080`.
 
 The web UI is built with React, TypeScript, Vite, React Router, TanStack Query,
 Mantine and Monaco. It contains no business logic; every workflow calls the
 existing REST API, which reuses the same preview, review, apply, configuration
 and debug services as the CLI.
+
+The Review IDE shows the current Plex text, the generated text, a Monaco diff,
+QA, editorial validation, verification, prompt budget, coverage and explainability
+panels. Developer Mode reveals additional Prompt Decisions, Evidence Ranking,
+token usage, timing and review-log diagnostics without changing backend behavior.
+Artists and albums can be searched, filtered, sorted and selected in the GUI.
+The Activity Panel, Live Log and REST Explorer expose existing backend status and
+debug data for day-to-day work without replacing the CLI.
 
 ## Roadmap
 

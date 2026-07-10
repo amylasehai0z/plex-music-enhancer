@@ -46,6 +46,14 @@ logs/
 # Local caches
 cache/
 data/
+docker/config/*
+docker/cache/*
+docker/logs/*
+docker/music/*
+!docker/config/.gitkeep
+!docker/cache/.gitkeep
+!docker/logs/.gitkeep
+!docker/music/.gitkeep
 
 # Generated output
 exports/

@@ -8,8 +8,17 @@ const ArtistsPage = lazy(() => import("./pages/ArtistsPage").then((module) => ({
 const DashboardPage = lazy(() =>
   import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })),
 );
+const DeveloperPage = lazy(() =>
+  import("./pages/DeveloperPage").then((module) => ({ default: module.DeveloperPage })),
+);
+const LiveLogPage = lazy(() =>
+  import("./pages/LiveLogPage").then((module) => ({ default: module.LiveLogPage })),
+);
 const PromptDebugPage = lazy(() =>
   import("./pages/PromptDebugPage").then((module) => ({ default: module.PromptDebugPage })),
+);
+const RestExplorerPage = lazy(() =>
+  import("./pages/RestExplorerPage").then((module) => ({ default: module.RestExplorerPage })),
 );
 const ReviewPage = lazy(() => import("./pages/ReviewPage").then((module) => ({ default: module.ReviewPage })));
 const SettingsPage = lazy(() =>
@@ -17,7 +26,7 @@ const SettingsPage = lazy(() =>
 );
 
 function lazyPage(element: ReactNode) {
-  return <Suspense fallback={<div className="surface">Lade Ansicht...</div>}>{element}</Suspense>;
+  return <Suspense fallback={<div className="app-loading">Ansicht wird geladen...</div>}>{element}</Suspense>;
 }
 
 const router = createBrowserRouter(
@@ -31,6 +40,9 @@ const router = createBrowserRouter(
         { path: "albums", element: lazyPage(<AlbumsPage />) },
         { path: "reviews", element: lazyPage(<ReviewPage />) },
         { path: "prompt-debug", element: lazyPage(<PromptDebugPage />) },
+        { path: "live-log", element: lazyPage(<LiveLogPage />) },
+        { path: "developer", element: lazyPage(<DeveloperPage />) },
+        { path: "rest-explorer", element: lazyPage(<RestExplorerPage />) },
         { path: "settings", element: lazyPage(<SettingsPage />) },
       ],
     },

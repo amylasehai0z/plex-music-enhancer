@@ -31,6 +31,7 @@ CHAPTERS=(
   "12-faq.md"
   "13-glossar.md"
   "14-anhang.md"
+  "15-container.md"
 )
 
 log() {

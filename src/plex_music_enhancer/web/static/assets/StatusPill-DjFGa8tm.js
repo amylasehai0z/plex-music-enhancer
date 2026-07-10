@@ -1,1 +1,0 @@
-import{j as r,y as s}from"./index-C_FTkCLd.js";function e({value:t}){const n=typeof t=="boolean"?t?"OK":"Offen":t??"Unbekannt",o=t===!0||t==="PASS"||t==="ok"?"teal":"orange";return r.jsx(s,{color:o,variant:"light",radius:"sm",children:n})}export{e as S};

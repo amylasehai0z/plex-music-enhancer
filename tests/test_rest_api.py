@@ -168,6 +168,16 @@ def test_frontend_is_served_when_built() -> None:
     assert "Plex Music Enhancer" in response.text
 
 
+def test_frontend_logo_is_served_when_built() -> None:
+    """FastAPI should serve Vite public logo assets from the same process."""
+    client = TestClient(create_app())
+
+    response = client.get("/logo/plex-music-enhancer-logo.svg")
+
+    assert response.status_code == 200
+    assert "svg" in response.text
+
+
 def test_log_endpoints_use_existing_debug_files() -> None:
     """Log endpoints should expose the same debug files used by the CLI."""
     REVIEW_DEBUG_LOG_PATH.write_text("review log", encoding="utf-8")
@@ -181,6 +191,22 @@ def test_log_endpoints_use_existing_debug_files() -> None:
     assert review_response.json()["content"] == "review log"
     assert prompt_response.status_code == 200
     assert prompt_response.json()["content"] == "prompt log"
+
+
+def test_debug_endpoints_expose_developer_analysis() -> None:
+    """Debug endpoints should expose backend developer-mode analysis."""
+    client = TestClient(create_app())
+
+    prompt_response = client.get("/api/v1/debug/prompt")
+    explain_response = client.get("/api/v1/debug/explain")
+    doctor_response = client.get("/api/v1/debug/doctor")
+
+    assert prompt_response.status_code == 200
+    assert "stats" in prompt_response.json()
+    assert explain_response.status_code == 200
+    assert "recommendations" in explain_response.json()
+    assert doctor_response.status_code == 200
+    assert "checks" in doctor_response.json()
 
 
 class _FakeConfigurationService:

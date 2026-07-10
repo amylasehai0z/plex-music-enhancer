@@ -21,11 +21,63 @@ export interface StatisticsResponse {
   cacheEntries: number;
 }
 
+export interface VersionResponse {
+  name: string;
+  version: string;
+  apiVersion: string;
+}
+
 export interface LogResponse {
   path: string;
   exists: boolean;
   content: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface PromptDebugStats {
+  characters: number;
+  words: number;
+  estimatedTokens: number;
+  budget?: number | null;
+  promptVersion?: string | null;
+}
+
+export interface PromptDebugDocument {
+  path: string;
+  exists: boolean;
+  content: string;
+  stats: PromptDebugStats;
+}
+
+export interface PromptMetaDocument {
+  path: string;
+  exists: boolean;
+  payload: Record<string, unknown>;
+}
+
+export interface ReviewLogDocument {
+  path: string;
+  exists: boolean;
+  content: string;
+  sections: Record<string, string>;
+}
+
+export interface DeveloperExplanation {
+  summary: string[];
+  promptSize?: number | null;
+  estimatedTokens?: number | null;
+  usedSources: Record<string, string>;
+  promptDecisions: Record<string, string[]>;
+  missedOpportunities: string[];
+  recommendations: string[];
+}
+
+export interface DeveloperDoctorReport {
+  prompt: PromptDebugDocument;
+  meta: PromptMetaDocument;
+  review: ReviewLogDocument;
+  explanation: DeveloperExplanation;
+  checks: Record<string, string>;
 }
 
 export interface LibraryArtist {

@@ -130,19 +130,42 @@ Wichtige URLs:
 
 | URL | Inhalt |
 | --- | --- |
-| `http://127.0.0.1:1008/` | Weboberfläche |
-| `http://127.0.0.1:1008/api/v1/docs` | Swagger UI |
-| `http://127.0.0.1:1008/api/v1/redoc` | ReDoc |
-| `http://127.0.0.1:1008/api/v1/openapi.json` | OpenAPI JSON |
+| `http://127.0.0.1:8080/` | Weboberfläche |
+| `http://127.0.0.1:8080/api/v1/docs` | Swagger UI |
+| `http://127.0.0.1:8080/api/v1/redoc` | ReDoc |
+| `http://127.0.0.1:8080/api/v1/openapi.json` | OpenAPI JSON |
 | `/api/v1/system/health` | Health Check |
 | `/api/v1/review/artist` | Artist Review |
 | `/api/v1/review/album` | Album Review |
 | `/api/v1/preview` | Preview |
 | `/api/v1/apply` | Apply |
+| `/api/v1/debug/prompt` | letzter Prompt mit Größenanalyse |
+| `/api/v1/debug/meta` | Prompt-Metadaten |
+| `/api/v1/debug/review` | strukturierter Review-Log |
+| `/api/v1/debug/explain` | Explain View |
+| `/api/v1/debug/doctor` | Developer-Diagnose |
 
 CLI, JSON-Ausgabe und Weboberfläche arbeiten auf denselben Backend-Services. Die
 Weboberfläche enthält keine Geschäftslogik und konsumiert ausschließlich die
 REST-API.
+
+Die erste Weboberfläche enthält:
+
+- Dashboard mit Systemstatus und Bibliotheksmetriken
+- Künstler- und Albumlisten mit Suche, Filter, Sortierung, Mehrfachauswahl und Kontextaktionen
+- Review-Seite mit aktueller Beschreibung, generiertem Text, Monaco Diff und Analyseleiste
+- Prompt Debug mit Prompt, Prompt-Metadaten und Review-Log
+- Live Log mit Suche und Level-Filter auf vorhandenen Debug-Ausgaben
+- Developer-Seite mit Explain View, Prompt Decisions und Diagnosekarten
+- REST Explorer für vorhandene API-Endpunkte, Statuscodes und Antwortzeiten
+- Einstellungen für Konfiguration und Provider-Status
+
+Der Developer-Mode-Schalter in der Weboberfläche blendet zusätzliche
+Diagnosebereiche ein. Er löst keine neuen AI-Anfragen aus und verändert keine
+Schreiblogik.
+
+Ein Klick auf `Review` in einer Liste öffnet die Review-IDE im Hauptbereich und
+nutzt denselben REST-Endpunkt wie die CLI-nahen Workflows.
 
 Geplante Phasen:
 

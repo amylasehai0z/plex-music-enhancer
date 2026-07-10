@@ -5,11 +5,13 @@ from __future__ import annotations
 import subprocess
 import sys
 from datetime import datetime
+from errno import EACCES, EADDRINUSE
 from json import dumps
 from os import environ
 from pathlib import Path
 from re import sub
 from shutil import which
+from socket import AF_INET, SO_REUSEADDR, SOCK_STREAM, SOL_SOCKET, socket
 from typing import Annotated
 
 import typer
@@ -291,7 +293,7 @@ def serve(
             envvar="PLEX_ENHANCER_WEB__PORT",
             help="Port to bind.",
         ),
-    ] = 1008,
+    ] = 8080,
     reload: Annotated[
         bool,
         typer.Option("--reload", help="Enable Uvicorn reload for local development."),
@@ -314,9 +316,42 @@ def serve(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
 
-    console.print(f"[green]Starting web interface at http://{host}:{port}/[/green]")
-    console.print(f"[green]REST API docs: http://{host}:{port}/api/v1/docs[/green]")
-    uvicorn.run(application, host=host, port=port, reload=reload)
+    bind_socket = socket(AF_INET, SOCK_STREAM)
+    bind_socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+    try:
+        bind_socket.bind((host, port))
+        bind_socket.listen(2048)
+    except OSError as exc:
+        bind_socket.close()
+        _render_serve_bind_error(host=host, port=port, error=exc)
+        raise typer.Exit(code=1) from exc
+
+    web_url = f"http://{host}:{port}"
+    console.print("[green]✔ Web Interface[/green]")
+    console.print(web_url)
+    console.print("[green]✔ REST API[/green]")
+    console.print(f"{web_url}/api/v1/docs")
+
+    config = uvicorn.Config(application, host=host, port=port, reload=reload)
+    server = uvicorn.Server(config)
+    server.run(sockets=[bind_socket])
+
+
+def _render_serve_bind_error(*, host: str, port: int, error: OSError) -> None:
+    """Render actionable web-server bind errors."""
+    url = f"http://{host}:{port}"
+    console.print("[red]Web Interface could not be started.[/red]")
+    console.print(f"Attempted URL: {url}")
+
+    if error.errno == EADDRINUSE:
+        console.print("[yellow]Port is already in use.[/yellow]")
+    elif error.errno == EACCES:
+        console.print("[yellow]Port is not permitted for this user or environment.[/yellow]")
+    else:
+        console.print(f"[yellow]Underlying exception:[/yellow] {error}")
+
+    console.print("Recommended alternative:")
+    console.print("  plex-enhancer serve --port 18080")
 
 
 @app.command()

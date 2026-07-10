@@ -9,6 +9,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { App } from "./App";
+import { DeveloperModeProvider } from "./stores/developerMode";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,7 +37,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <MantineProvider defaultColorScheme="dark" theme={theme}>
       <Notifications position="top-right" />
       <QueryClientProvider client={queryClient}>
-        <App />
+        <DeveloperModeProvider>
+          <App />
+        </DeveloperModeProvider>
       </QueryClientProvider>
     </MantineProvider>
   </React.StrictMode>,

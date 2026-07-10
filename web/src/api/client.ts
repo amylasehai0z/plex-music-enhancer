@@ -1,14 +1,20 @@
 import type {
   ApplyRequest,
   ConfigurationResponse,
+  DeveloperDoctorReport,
+  DeveloperExplanation,
   LibraryAlbum,
   LibraryArtist,
   LogResponse,
+  PromptDebugDocument,
+  PromptMetaDocument,
   PreviewResponse,
   ProviderInfo,
   ReviewRequest,
+  ReviewLogDocument,
   ReviewResponse,
   StatisticsResponse,
+  VersionResponse,
 } from "../types/api";
 
 const API_PREFIX = "/api/v1";
@@ -129,6 +135,14 @@ export class StatisticsApi {
   }
 }
 
+export class SystemApi {
+  constructor(private readonly client: ApiClient) {}
+
+  version(): Promise<VersionResponse> {
+    return this.client.get<VersionResponse>("/system/version");
+  }
+}
+
 export class LogApi {
   constructor(private readonly client: ApiClient) {}
 
@@ -138,6 +152,30 @@ export class LogApi {
 
   review(): Promise<LogResponse> {
     return this.client.get<LogResponse>("/logs/review");
+  }
+}
+
+export class DebugApi {
+  constructor(private readonly client: ApiClient) {}
+
+  prompt(): Promise<PromptDebugDocument> {
+    return this.client.get<PromptDebugDocument>("/debug/prompt");
+  }
+
+  meta(): Promise<PromptMetaDocument> {
+    return this.client.get<PromptMetaDocument>("/debug/meta");
+  }
+
+  review(): Promise<ReviewLogDocument> {
+    return this.client.get<ReviewLogDocument>("/debug/review");
+  }
+
+  explain(): Promise<DeveloperExplanation> {
+    return this.client.get<DeveloperExplanation>("/debug/explain");
+  }
+
+  doctor(): Promise<DeveloperDoctorReport> {
+    return this.client.get<DeveloperDoctorReport>("/debug/doctor");
   }
 }
 
@@ -152,5 +190,7 @@ export const api = {
   providers: new ProviderApi(client),
   library: new LibraryApi(client),
   statistics: new StatisticsApi(client),
+  system: new SystemApi(client),
   logs: new LogApi(client),
+  debug: new DebugApi(client),
 };

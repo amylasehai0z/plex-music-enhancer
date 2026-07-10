@@ -53,10 +53,10 @@ plex-enhancer serve
 
 Available URLs:
 
-- Web interface: `http://127.0.0.1:1008/`
-- Swagger UI: `http://127.0.0.1:1008/api/v1/docs`
-- ReDoc: `http://127.0.0.1:1008/api/v1/redoc`
-- OpenAPI JSON: `http://127.0.0.1:1008/api/v1/openapi.json`
+- Web interface: `http://127.0.0.1:8080/`
+- Swagger UI: `http://127.0.0.1:8080/api/v1/docs`
+- ReDoc: `http://127.0.0.1:8080/api/v1/redoc`
+- OpenAPI JSON: `http://127.0.0.1:8080/api/v1/openapi.json`
 
 ## Implemented Endpoints
 
