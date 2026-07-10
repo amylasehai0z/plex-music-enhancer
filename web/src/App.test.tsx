@@ -1,7 +1,18 @@
 import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
+import type { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+type MemoryRouter = ReturnType<typeof createMemoryRouter>;
+type MemoryRouterOptions = Parameters<typeof createMemoryRouter>[1];
+type RouteObjects = Parameters<typeof createMemoryRouter>[0];
+type RouterProviderProps = ComponentProps<typeof RouterProvider>;
+type TestRouter = {
+  __testOptions?: MemoryRouterOptions;
+  __testRoutes: RouteObjects;
+};
 
 vi.mock("@monaco-editor/react", () => ({
   Editor: () => <div>Editor</div>,
@@ -10,12 +21,30 @@ vi.mock("@monaco-editor/react", () => ({
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  const routerCache = new WeakMap<object, MemoryRouter>();
+  const isTestRouter = (router: unknown): router is TestRouter =>
+    Boolean(router && typeof router === "object" && "__testRoutes" in router);
+
   return {
     ...actual,
     createBrowserRouter: (
       routes: Parameters<typeof actual.createBrowserRouter>[0],
       options?: Parameters<typeof actual.createBrowserRouter>[1],
-    ) => actual.createMemoryRouter(routes, { ...options, initialEntries: ["/"] }),
+    ) => ({ __testOptions: options as MemoryRouterOptions, __testRoutes: routes }),
+    RouterProvider: (props: RouterProviderProps & { router: RouterProviderProps["router"] | TestRouter }) => {
+      let router = props.router;
+      if (isTestRouter(router)) {
+        const cacheKey = router as object;
+        const cachedRouter = routerCache.get(cacheKey);
+        if (cachedRouter) {
+          router = cachedRouter;
+        } else {
+          router = actual.createMemoryRouter(router.__testRoutes, { ...router.__testOptions, initialEntries: ["/"] });
+          routerCache.set(cacheKey, router);
+        }
+      }
+      return <actual.RouterProvider {...props} router={router as RouterProviderProps["router"]} />;
+    },
   };
 });
 
