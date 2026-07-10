@@ -85,7 +85,6 @@ describe("App navigation", () => {
     const [{ App }, { DeveloperModeProvider }] = await Promise.all([
       import("./App"),
       import("./stores/developerMode"),
-      import("./pages/DashboardPage"),
     ]);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const { container } = render(

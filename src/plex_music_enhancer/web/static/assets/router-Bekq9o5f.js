@@ -1,4 +1,4 @@
-import{r as g,R as Jr,a as Yr}from"./mantine-8KVWiqFv.js";/**
+import{r as g,R as Jr,a as Yr}from"./mantine-BOQ2PF4V.js";/**
  * @remix-run/router v1.23.3
  *
  * Copyright (c) Remix Software Inc.

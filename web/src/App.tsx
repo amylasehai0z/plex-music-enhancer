@@ -2,12 +2,10 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { lazy, Suspense, type ReactNode } from "react";
 
 import { AppLayout } from "./layouts/AppLayout";
+import { DashboardPage } from "./pages/DashboardPage";
 
 const AlbumsPage = lazy(() => import("./pages/AlbumsPage").then((module) => ({ default: module.AlbumsPage })));
 const ArtistsPage = lazy(() => import("./pages/ArtistsPage").then((module) => ({ default: module.ArtistsPage })));
-const DashboardPage = lazy(() =>
-  import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })),
-);
 const DeveloperPage = lazy(() =>
   import("./pages/DeveloperPage").then((module) => ({ default: module.DeveloperPage })),
 );
@@ -35,7 +33,7 @@ const router = createBrowserRouter(
       path: "/",
       element: <AppLayout />,
       children: [
-        { index: true, element: lazyPage(<DashboardPage />) },
+        { index: true, element: <DashboardPage /> },
         { path: "artists", element: lazyPage(<ArtistsPage />) },
         { path: "albums", element: lazyPage(<AlbumsPage />) },
         { path: "reviews", element: lazyPage(<ReviewPage />) },
