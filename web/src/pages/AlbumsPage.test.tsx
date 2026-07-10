@@ -1,7 +1,7 @@
 import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AlbumsPage } from "./AlbumsPage";
@@ -13,10 +13,16 @@ function renderPage() {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <AlbumsPage />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>
     </MantineProvider>,
   );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
 function stubAlbumsApi() {
@@ -35,6 +41,7 @@ function stubAlbumsApi() {
         year: 1965,
         trackCount: 2,
         genres: ["Jazz"],
+        coverUrl: "/covers/pastel-blues.jpg",
         reviewStatus: "present",
         summaryPresent: true,
         plannedAction: null,
@@ -52,6 +59,7 @@ function stubAlbumsApi() {
         year: 1966,
         trackCount: 1,
         genres: [],
+        coverUrl: null,
         reviewStatus: "missing",
         summaryPresent: false,
         plannedAction: null,
@@ -70,6 +78,7 @@ function stubAlbumsApi() {
           year: 1965,
           trackCount: 2,
           genres: ["Jazz"],
+          coverUrl: "/covers/pastel-blues.jpg",
           reviewStatus: "present",
           summaryPresent: true,
           plannedAction: null,
@@ -83,6 +92,7 @@ function stubAlbumsApi() {
           year: 1966,
           trackCount: 1,
           genres: [],
+          coverUrl: null,
           reviewStatus: "missing",
           summaryPresent: false,
           plannedAction: null,
@@ -141,6 +151,9 @@ describe("AlbumsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Alben" })).toBeInTheDocument();
     expect(await screen.findByText("Pastel Blues")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByRole("img", { name: "Pastel Blues Cover" }).length).toBeGreaterThan(0);
+    });
     expect(screen.getAllByText("Nina Simone").length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/v1/albums/200", undefined);
@@ -148,6 +161,14 @@ describe("AlbumsPage", () => {
     expect(await screen.findByText("1. Be My Husband")).toBeInTheDocument();
     expect(screen.getByText("88/100")).toBeInTheDocument();
     expect(screen.getByText("Starkes Album.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review öffnen" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/review-workflow?target=album&artist=Nina%20Simone&album=Pastel%20Blues&run=1",
+      );
+    });
 
     fireEvent.change(screen.getByRole("textbox", { name: "Album suchen" }), {
       target: { value: "Wild" },
@@ -171,5 +192,43 @@ describe("AlbumsPage", () => {
       );
     });
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/albums", undefined);
+  });
+
+  it("filters albums by review status", async () => {
+    stubAlbumsApi();
+
+    renderPage();
+
+    expect(await screen.findByText("Pastel Blues")).toBeInTheDocument();
+    expect(screen.getByLabelText("Aktiver Review-Filter")).toHaveTextContent("Alle Alben");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Review-Filter" }), {
+      target: { value: "missing" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Wild Is the Wind")).toBeInTheDocument();
+      expect(screen.queryByText("Pastel Blues")).not.toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Aktiver Review-Filter")).toHaveTextContent("Ohne Review");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Review-Filter" }), {
+      target: { value: "present" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Pastel Blues").length).toBeGreaterThan(0);
+      expect(screen.queryByText("Wild Is the Wind")).not.toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Aktiver Review-Filter")).toHaveTextContent("Mit Review");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Review-Filter" }), {
+      target: { value: "all" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Pastel Blues").length).toBeGreaterThan(0);
+      expect(screen.getByText("Wild Is the Wind")).toBeInTheDocument();
+    });
   });
 });

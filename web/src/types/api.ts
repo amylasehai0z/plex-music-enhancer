@@ -146,6 +146,7 @@ export interface LibraryAlbum {
   year?: number | null;
   trackCount: number;
   genres: string[];
+  coverUrl?: string | null;
   reviewStatus: "missing" | "present" | "running" | "error";
   summaryPresent: boolean;
   plannedAction?: string | null;

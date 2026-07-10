@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from os import environ
 from pathlib import Path
@@ -57,6 +58,9 @@ class SyncedAlbum(BaseModel):
     parent_artist: str | None = Field(default=None, serialization_alias="parentArtist")
     guid: str | None = None
     year: int | None = None
+    genres: list[str] = Field(default_factory=list)
+    summary_present: bool = Field(default=False, serialization_alias="summaryPresent")
+    cover_url: str | None = Field(default=None, serialization_alias="coverUrl")
     library_id: str = Field(serialization_alias="libraryId")
     library_title: str = Field(serialization_alias="libraryTitle")
 
@@ -326,6 +330,10 @@ def _album_item(album: Any, *, library_id: str, library_title: str) -> SyncedAlb
         parent_artist=_optional_string(getattr(album, "parentTitle", None)),
         guid=_optional_string(getattr(album, "guid", None)),
         year=_optional_int(getattr(album, "year", None)),
+        genres=_tag_names(getattr(album, "genres", [])),
+        summary_present=bool(_optional_string(getattr(album, "summary", None))),
+        cover_url=_optional_string(getattr(album, "thumb", None))
+        or _optional_string(getattr(album, "art", None)),
         library_id=library_id,
         library_title=library_title,
     )
@@ -375,6 +383,27 @@ def _optional_int(value: object) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _tag_names(values: object) -> list[str]:
+    """Return deduplicated Plex tag labels as strings."""
+    if values is None:
+        return []
+    if isinstance(values, str):
+        return [values] if values else []
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for value in cast(Iterable[object], values):
+        text = _optional_string(getattr(value, "tag", value))
+        if text is None:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(text)
+    return names
 
 
 __all__ = [

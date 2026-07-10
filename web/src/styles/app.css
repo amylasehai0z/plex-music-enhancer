@@ -86,6 +86,14 @@ body {
     #222833;
 }
 
+.cover-image {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #222833;
+}
+
 .brand-lockup {
   min-height: 42px;
 }

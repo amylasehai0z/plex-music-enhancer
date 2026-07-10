@@ -295,6 +295,7 @@ class LibraryAlbum(APIModel):
     year: int | None = None
     track_count: int = Field(default=0, ge=0, serialization_alias="trackCount")
     genres: list[str] = Field(default_factory=list)
+    cover_url: str | None = Field(default=None, serialization_alias="coverUrl")
     review_status: str = Field(default="missing", serialization_alias="reviewStatus")
     summary_present: bool = Field(default=False, serialization_alias="summaryPresent")
     planned_action: str | None = Field(default=None, serialization_alias="plannedAction")

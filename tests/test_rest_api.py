@@ -258,13 +258,16 @@ def test_album_endpoints_use_plex_sync_snapshot() -> None:
         "library": "Music",
         "year": 1965,
         "trackCount": 2,
-        "genres": ["Blues", "Jazz"],
+        "genres": ["Jazz"],
+        "coverUrl": "/library/metadata/200/thumb",
         "reviewStatus": "present",
         "summaryPresent": True,
         "plannedAction": None,
     }
     assert albums.json()[1]["reviewStatus"] == "missing"
     assert albums.json()[1]["trackCount"] == 1
+    assert albums.json()[1]["genres"] == ["Vocal Jazz"]
+    assert albums.json()[1]["summaryPresent"] is False
     assert detail.status_code == 200
     payload = detail.json()
     assert payload["title"] == "Pastel Blues"
@@ -508,6 +511,9 @@ class _FakePlexSyncService:
                     parent_artist="Nina Simone",
                     guid="plex://album/200",
                     year=1965,
+                    genres=["Jazz"],
+                    summary_present=True,
+                    cover_url="/library/metadata/200/thumb",
                     library_id="1",
                     library_title="Music",
                 ),
@@ -517,6 +523,9 @@ class _FakePlexSyncService:
                     parent_artist="Nina Simone",
                     guid="plex://album/201",
                     year=1966,
+                    genres=["Vocal Jazz"],
+                    summary_present=False,
+                    cover_url=None,
                     library_id="1",
                     library_title="Music",
                 ),

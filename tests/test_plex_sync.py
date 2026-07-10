@@ -34,6 +34,9 @@ class FakeAlbum:
         self.parentTitle = "Nina Simone"
         self.guid = "plex://album/200"
         self.year = 1965
+        self.summary = "Album summary."
+        self.genres = [_FakeTag("Jazz"), _FakeTag("Jazz")]
+        self.thumb = "/library/metadata/200/thumb"
 
 
 class FakeArtist:
@@ -45,6 +48,14 @@ class FakeArtist:
         self.title = "Nina Simone"
         self.guid = "plex://artist/100"
         self.summary = "An influential artist biography."
+
+
+class _FakeTag:
+    """Fake Plex tag."""
+
+    def __init__(self, tag: str) -> None:
+        """Create a fake tag."""
+        self.tag = tag
 
 
 class FakeMusicSection:
@@ -129,6 +140,9 @@ def test_plex_sync_persists_music_library_snapshot(monkeypatch, tmp_path: Path) 
     snapshot = restarted.snapshot()
     assert snapshot is not None
     assert snapshot.artists[0].summary_present is True
+    assert snapshot.albums[0].summary_present is True
+    assert snapshot.albums[0].genres == ["Jazz"]
+    assert snapshot.albums[0].cover_url == "/library/metadata/200/thumb"
 
 
 def test_plex_sync_reports_failures_without_exposing_token(monkeypatch, tmp_path: Path) -> None:

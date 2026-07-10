@@ -74,9 +74,10 @@ def _album_entry(
         library=album.library_title,
         year=album.year,
         track_count=len(tracks),
-        genres=review.content.genres if review is not None else [],
+        genres=album.genres,
+        cover_url=album.cover_url,
         review_status="present" if review is not None else "missing",
-        summary_present=review is not None,
+        summary_present=album.summary_present,
     )
 
 

@@ -7,7 +7,6 @@ import {
   Loader,
   Menu,
   NativeSelect,
-  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -125,10 +124,11 @@ export function AlbumsPage() {
           <Title order={1}>Alben</Title>
           <Text c="dimmed">Synchronized Plex albums with track lists and AI review status.</Text>
         </div>
-        <Group>
+        <Group align="flex-end">
           <TextInput placeholder="Album suchen" aria-label="Album suchen" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
           <NativeSelect
-            aria-label="Filter"
+            aria-label="Review-Filter"
+            label="Review"
             value={filter}
             onChange={(event) => setFilter(event.currentTarget.value)}
             data={[
@@ -139,6 +139,7 @@ export function AlbumsPage() {
           />
           <NativeSelect
             aria-label="Sortierung"
+            label="Sortierung"
             value={sort}
             onChange={(event) => setSort(event.currentTarget.value)}
             data={[
@@ -152,14 +153,19 @@ export function AlbumsPage() {
         </Group>
       </Group>
       <Group justify="space-between" className="selection-bar">
-        <Text size="sm" c="dimmed">
-          {selected.length} ausgewählt · {rows.length} sichtbar
-        </Text>
+        <Group gap="xs">
+          <Text size="sm" c="dimmed">
+            {selected.length} ausgewählt · {rows.length} sichtbar
+          </Text>
+          <Badge aria-label="Aktiver Review-Filter" variant="light">
+            {filterLabel(filter)}
+          </Badge>
+        </Group>
         <Button leftSection={<RefreshCw size={14} />} size="xs" variant="subtle" onClick={() => void albums.refetch()}>
           Refresh
         </Button>
       </Group>
-      <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="md">
+      <div className="library-split-view">
         <section className="surface table-surface">
           <Table stickyHeader>
             <Table.Thead>
@@ -202,7 +208,7 @@ export function AlbumsPage() {
                     />
                   </Table.Td>
                   <Table.Td>
-                    <div className="cover-placeholder" />
+                    <AlbumCover title={album.title} coverUrl={album.coverUrl} />
                   </Table.Td>
                   <Table.Td>{album.title}</Table.Td>
                   <Table.Td>{album.artist}</Table.Td>
@@ -249,7 +255,7 @@ export function AlbumsPage() {
               {!rows.length ? (
                 <Table.Tr>
                   <Table.Td colSpan={8}>
-                    <Text c="dimmed">Keine Alben für diese Ansicht gefunden.</Text>
+                    <Text c="dimmed">Keine Alben gefunden.</Text>
                   </Table.Td>
                 </Table.Tr>
               ) : null}
@@ -265,9 +271,26 @@ export function AlbumsPage() {
           onOpenArtist={openArtist}
           onReview={(artist, album) => reviewAlbum(artist, album)}
         />
-      </SimpleGrid>
+      </div>
     </Stack>
   );
+}
+
+function filterLabel(filter: string) {
+  if (filter === "missing") {
+    return "Ohne Review";
+  }
+  if (filter === "present") {
+    return "Mit Review";
+  }
+  return "Alle Alben";
+}
+
+function AlbumCover({ coverUrl, title }: { coverUrl?: string | null; title: string }) {
+  if (coverUrl) {
+    return <img src={coverUrl} alt={`${title} Cover`} className="cover-image" />;
+  }
+  return <div className="cover-placeholder" aria-label={`${title} Cover nicht vorhanden`} />;
 }
 
 function AlbumDetailPanel({
@@ -318,15 +341,18 @@ function AlbumDetailPanel({
     <section className="surface">
       <Stack gap="md">
         <Group justify="space-between" align="flex-start">
-          <div>
-            <Title order={2}>{detail.title}</Title>
-            <Button variant="subtle" size="compact-sm" px={0} onClick={() => onOpenArtist(detail.artist)}>
-              {detail.artist}
-            </Button>
-            <Text c="dimmed" size="sm">
-              {[detail.year ?? "Jahr unbekannt", detail.library ?? "Musikbibliothek"].join(" · ")}
-            </Text>
-          </div>
+          <Group align="flex-start" wrap="nowrap">
+            <AlbumCover title={detail.title} coverUrl={detail.coverUrl} />
+            <div>
+              <Title order={2}>{detail.title}</Title>
+              <Button variant="subtle" size="compact-sm" px={0} onClick={() => onOpenArtist(detail.artist)}>
+                {detail.artist}
+              </Button>
+              <Text c="dimmed" size="sm">
+                {[detail.year ?? "Jahr unbekannt", detail.library ?? "Musikbibliothek"].join(" · ")}
+              </Text>
+            </div>
+          </Group>
           <Badge leftSection={<Disc3 size={12} />} variant="light">
             {detail.trackCount} Tracks
           </Badge>
