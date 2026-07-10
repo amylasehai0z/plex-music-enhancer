@@ -3,8 +3,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DeveloperModeProvider } from "./stores/developerMode";
-
 vi.mock("@monaco-editor/react", () => ({
   Editor: () => <div>Editor</div>,
   DiffEditor: () => <div>Diff Editor</div>,
@@ -39,13 +37,18 @@ function stubDashboardApi() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.resetModules();
 });
 
 describe("App navigation", () => {
   it("shows the desktop navigation", async () => {
     const fetchMock = stubDashboardApi();
-    window.history.pushState({}, "", "/");
-    const { App } = await import("./App");
+    vi.resetModules();
+    window.history.replaceState({}, "", "/");
+    const [{ App }, { DeveloperModeProvider }] = await Promise.all([
+      import("./App"),
+      import("./stores/developerMode"),
+    ]);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const { container } = render(
       <MantineProvider>
