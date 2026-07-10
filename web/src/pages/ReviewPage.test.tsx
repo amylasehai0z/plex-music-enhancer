@@ -1,8 +1,7 @@
 import { MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
@@ -36,7 +35,6 @@ function renderPage() {
 
 describe("ReviewPage", () => {
   it("renders the review form and submits album reviews", async () => {
-    const user = userEvent.setup();
     const fetchMock = vi.fn(
       async () =>
         new Response(
@@ -114,7 +112,9 @@ describe("ReviewPage", () => {
     renderPage();
 
     const submitButton = await screen.findByRole("button", { name: /review erzeugen/i });
-    await user.click(submitButton);
+    const form = submitButton.closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form as HTMLFormElement);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
