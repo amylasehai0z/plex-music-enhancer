@@ -4,7 +4,9 @@ import {
   Checkbox,
   Group,
   Menu,
+  Modal,
   NativeSelect,
+  ScrollArea,
   Stack,
   Table,
   Text,
@@ -12,7 +14,8 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { Eye, ListChecks, MoreHorizontal, Music2, PencilLine, Play, RefreshCw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, Eye, ListChecks, MoreHorizontal, Music2, PencilLine, Play, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -25,18 +28,33 @@ import {
   LibraryExplorer,
   LibraryLoadingState,
 } from "../components/LibraryExplorer";
-import { useArtist, useArtists, useBatchStartMutation } from "../hooks/useApi";
-import type { LibraryArtistDetail } from "../types/api";
+import {
+  useApplyMutation,
+  useArtist,
+  useArtistRefreshMutation,
+  useArtists,
+  useBatchStartMutation,
+  usePreviewMutation,
+} from "../hooks/useApi";
+import type { LibraryArtist, LibraryArtistDetail, ReviewDocument } from "../types/api";
+
+type BusyAction = "preview" | "apply" | "refresh";
 
 export function ArtistsPage() {
   const artists = useArtists();
   const batchStart = useBatchStartMutation();
+  const preview = usePreviewMutation();
+  const apply = useApplyMutation();
+  const refreshArtist = useArtistRefreshMutation();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("title");
   const [selected, setSelected] = useState<string[]>([]);
   const [activeArtistId, setActiveArtistId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<{ artistId: string; action: BusyAction } | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<ReviewDocument | null>(null);
   const rows = useMemo(() => {
     return [...(artists.data ?? [])]
       .filter((artist) => artist.title.toLowerCase().includes(search.toLowerCase()))
@@ -73,6 +91,63 @@ export function ArtistsPage() {
     navigate(`/review-workflow?target=artist&artist=${encodeURIComponent(artist)}&run=1`);
   }
 
+  function isBusy(artist: LibraryArtist, action: BusyAction) {
+    return busy?.artistId === artist.ratingKey && busy.action === action;
+  }
+
+  async function refreshSelectedArtist(artist: LibraryArtist) {
+    setBusy({ artistId: artist.ratingKey, action: "refresh" });
+    try {
+      await refreshArtist.mutateAsync(artist.ratingKey);
+      await queryClient.invalidateQueries({ queryKey: ["artists"] });
+      await queryClient.invalidateQueries({ queryKey: ["artists", artist.ratingKey] });
+      notifications.show({ color: "teal", message: `${artist.title} wurde aus Plex aktualisiert.` });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Künstler konnte nicht aktualisiert werden." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function previewArtist(artist: LibraryArtist) {
+    setBusy({ artistId: artist.ratingKey, action: "preview" });
+    try {
+      const response = await preview.mutateAsync({ target: "artist", artist: artist.title });
+      setPreviewDocument(response.document);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Preview konnte nicht erzeugt werden." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function applyArtist(artist: LibraryArtist) {
+    setBusy({ artistId: artist.ratingKey, action: "apply" });
+    try {
+      const response = await apply.mutateAsync({ target: "artist", artist: artist.title });
+      if (response.status !== "SUCCESS" || !response.writeSuccessful || !response.verificationPassed) {
+        notifications.show({ color: "red", message: response.message || "Plex hat die Änderung nicht bestätigt." });
+        return;
+      }
+      await refreshArtist.mutateAsync(artist.ratingKey);
+      await queryClient.invalidateQueries({ queryKey: ["artists"] });
+      await queryClient.invalidateQueries({ queryKey: ["artists", artist.ratingKey] });
+      notifications.show({ color: "teal", message: "Plex hat die Künstler-Biografie bestätigt." });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Apply konnte nicht abgeschlossen werden." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function openInPlex(artist: LibraryArtist) {
+    if (!artist.plexUrl) {
+      notifications.show({ color: "yellow", message: "Plex URL ist nicht konfiguriert." });
+      return;
+    }
+    window.open(artist.plexUrl, "_blank", "noopener,noreferrer");
+  }
+
   function startBatch() {
     const selectedIds = selected.length ? selected : selectedArtistId ? [selectedArtistId] : [];
     const items = rows
@@ -105,10 +180,11 @@ export function ArtistsPage() {
   }
 
   return (
-    <LibraryExplorer
-      title="Künstler"
-      description="Synchronized Plex artists with albums, tracks and review context."
-      toolbar={
+    <>
+      <LibraryExplorer
+        title="Künstler"
+        description="Synchronized Plex artists with albums, tracks and review context."
+        toolbar={
         <>
           <TextInput placeholder="Künstler suchen" aria-label="Künstler suchen" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
           <NativeSelect
@@ -136,7 +212,7 @@ export function ArtistsPage() {
           />
         </>
       }
-      meta={
+        meta={
         <>
         <Group gap="xs">
           <Text size="sm" c="dimmed">
@@ -146,7 +222,19 @@ export function ArtistsPage() {
             {filterLabel(filter)}
           </Badge>
         </Group>
-        <Button leftSection={<RefreshCw size={14} />} size="xs" variant="subtle" onClick={() => void artists.refetch()}>
+        <Button
+          leftSection={<RefreshCw size={14} />}
+          size="xs"
+          variant="subtle"
+          disabled={!selectedArtistId}
+          loading={Boolean(busy && busy.action === "refresh")}
+          onClick={() => {
+            const artist = rows.find((item) => item.ratingKey === selectedArtistId);
+            if (artist) {
+              void refreshSelectedArtist(artist);
+            }
+          }}
+        >
           Refresh
         </Button>
         <Button leftSection={<ListChecks size={14} />} size="xs" variant="light" loading={batchStart.isPending} onClick={startBatch}>
@@ -154,7 +242,7 @@ export function ArtistsPage() {
         </Button>
         </>
       }
-      list={
+        list={
         <Table stickyHeader>
             <Table.Thead>
               <Table.Tr>
@@ -208,11 +296,26 @@ export function ArtistsPage() {
                       <Button leftSection={<Play size={16} />} size="xs" variant="light" onClick={() => reviewArtist(artist.title)}>
                         Review
                       </Button>
-                      <Button leftSection={<Eye size={16} />} size="xs" variant="subtle">
+                      <Button
+                        leftSection={<Eye size={16} />}
+                        size="xs"
+                        variant="subtle"
+                        loading={isBusy(artist, "preview")}
+                        onClick={() => void previewArtist(artist)}
+                      >
                         Preview
                       </Button>
-                      <Button leftSection={<PencilLine size={16} />} size="xs" variant="subtle">
+                      <Button
+                        leftSection={<PencilLine size={16} />}
+                        size="xs"
+                        variant="subtle"
+                        loading={isBusy(artist, "apply")}
+                        onClick={() => void applyArtist(artist)}
+                      >
                         Apply
+                      </Button>
+                      <Button leftSection={<ExternalLink size={16} />} size="xs" variant="subtle" onClick={() => openInPlex(artist)}>
+                        Plex
                       </Button>
                       <Menu shadow="md" width={180}>
                         <Menu.Target>
@@ -224,10 +327,16 @@ export function ArtistsPage() {
                           <Menu.Item leftSection={<Play size={14} />} onClick={() => reviewArtist(artist.title)}>
                             Review
                           </Menu.Item>
-                          <Menu.Item leftSection={<Eye size={14} />}>Preview</Menu.Item>
-                          <Menu.Item leftSection={<PencilLine size={14} />}>Apply</Menu.Item>
-                          <Menu.Item>Open in Plex</Menu.Item>
-                          <Menu.Item onClick={() => void artists.refetch()}>Refresh</Menu.Item>
+                          <Menu.Item leftSection={<Eye size={14} />} onClick={() => void previewArtist(artist)}>
+                            Preview
+                          </Menu.Item>
+                          <Menu.Item leftSection={<PencilLine size={14} />} onClick={() => void applyArtist(artist)}>
+                            Apply
+                          </Menu.Item>
+                          <Menu.Item leftSection={<ExternalLink size={14} />} onClick={() => openInPlex(artist)}>
+                            Open in Plex
+                          </Menu.Item>
+                          <Menu.Item onClick={() => void refreshSelectedArtist(artist)}>Refresh</Menu.Item>
                         </Menu.Dropdown>
                       </Menu>
                     </Group>
@@ -244,10 +353,12 @@ export function ArtistsPage() {
             </Table.Tbody>
           </Table>
       }
-      detail={
-        <ArtistDetailPanel loading={activeArtist.isLoading} error={activeArtist.error as Error | null} detail={activeArtist.data} />
-      }
-    />
+        detail={
+          <ArtistDetailPanel loading={activeArtist.isLoading} error={activeArtist.error as Error | null} detail={activeArtist.data} />
+        }
+      />
+      <PreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />
+    </>
   );
 }
 
@@ -321,6 +432,14 @@ function ArtistDetailPanel({
         </div>
         <div>
           <Text fw={700} mb="xs">
+            Biografie
+          </Text>
+          <Text size="sm" c={detail.summary ? undefined : "dimmed"}>
+            {detail.summary || "Keine Biografie im Sync-/Review-Kontext vorhanden."}
+          </Text>
+        </div>
+        <div>
+          <Text fw={700} mb="xs">
             Vorhandene Reviews
           </Text>
           <Stack gap={4}>
@@ -335,5 +454,50 @@ function ArtistDetailPanel({
       </Stack>
       ) : null}
     </LibraryDetailState>
+  );
+}
+
+function PreviewModal({ document, onClose }: { document: ReviewDocument | null; onClose: () => void }) {
+  return (
+    <Modal opened={Boolean(document)} onClose={onClose} title="Künstler-Preview" size="xl">
+      {document ? (
+        <Stack gap="md">
+          <Group justify="space-between">
+            <div>
+              <Title order={3}>{document.artist}</Title>
+              <Text c="dimmed" size="sm">
+                {document.provider} · {document.model}
+              </Text>
+            </div>
+            <Badge variant="light">{document.qa.status}</Badge>
+          </Group>
+          <Group align="stretch" grow>
+            <SummaryBlock title="Aktuelle Plex-Biografie" value={document.currentSummary || "Keine aktuelle Biografie."} />
+            <SummaryBlock title="Generierte Biografie" value={document.generatedSummary} />
+          </Group>
+          <div>
+            <Text fw={700} mb="xs">
+              Diff
+            </Text>
+            <ScrollArea.Autosize mah={220}>
+              <pre className="debug-pre">{document.unifiedDiff}</pre>
+            </ScrollArea.Autosize>
+          </div>
+        </Stack>
+      ) : null}
+    </Modal>
+  );
+}
+
+function SummaryBlock({ title, value }: { title: string; value: string }) {
+  return (
+    <div>
+      <Text fw={700} mb="xs">
+        {title}
+      </Text>
+      <ScrollArea.Autosize mah={260}>
+        <Text size="sm">{value}</Text>
+      </ScrollArea.Autosize>
+    </div>
   );
 }

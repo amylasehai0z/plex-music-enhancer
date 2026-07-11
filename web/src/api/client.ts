@@ -143,6 +143,13 @@ export class LibraryApi {
     return this.client.get<LibraryArtistDetail>(`/artists/${encodeURIComponent(artistId)}`);
   }
 
+  refreshArtist(artistId: string): Promise<LibraryArtistDetail> {
+    return this.client.post<LibraryArtistDetail>(
+      `/artists/${encodeURIComponent(artistId)}/refresh`,
+      {},
+    );
+  }
+
   albums(): Promise<LibraryAlbum[]> {
     return this.client.get<LibraryAlbum[]>("/albums");
   }

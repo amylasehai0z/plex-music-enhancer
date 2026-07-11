@@ -89,6 +89,12 @@ export function useArtist(artistId: string | null) {
   });
 }
 
+export function useArtistRefreshMutation() {
+  return useMutation({
+    mutationFn: (artistId: string) => api.library.refreshArtist(artistId),
+  });
+}
+
 export function useAlbums() {
   return useQuery({ queryKey: ["albums"], queryFn: () => api.library.albums() });
 }
@@ -104,6 +110,12 @@ export function useAlbum(albumId: string | null) {
 export function useReviewMutation() {
   return useMutation({
     mutationFn: (request: ReviewRequest) => api.review.review(request),
+  });
+}
+
+export function usePreviewMutation() {
+  return useMutation({
+    mutationFn: (request: ReviewRequest) => api.preview.preview(request),
   });
 }
 

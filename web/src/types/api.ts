@@ -134,6 +134,9 @@ export interface LibraryArtist {
   albumCount: number;
   trackCount: number;
   summaryPresent: boolean;
+  summary?: string | null;
+  reviewCount: number;
+  plexUrl?: string | null;
   plannedAction?: string | null;
 }
 

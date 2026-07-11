@@ -43,6 +43,7 @@ class SyncedArtist(BaseModel):
     rating_key: str = Field(serialization_alias="ratingKey")
     title: str
     guid: str | None = None
+    summary: str | None = None
     summary_present: bool = Field(default=False, serialization_alias="summaryPresent")
     library_id: str = Field(serialization_alias="libraryId")
     library_title: str = Field(serialization_alias="libraryTitle")
@@ -118,6 +119,9 @@ class _PlexServer(Protocol):
     @property
     def library(self) -> _PlexLibrary:
         """Return the Plex library accessor."""
+
+    def fetchItem(self, key: str) -> Any:  # noqa: N802
+        """Fetch one Plex metadata item by API path."""
 
 
 class PlexSyncStore:
@@ -206,6 +210,42 @@ class PlexLibrarySyncService:
         with self._lock:
             self._status = snapshot.status()
             return self._status
+
+    def refresh_artist(self, artist_id: str) -> PlexSyncSnapshot:
+        """Refresh one synchronized artist from Plex and persist the updated snapshot."""
+        settings = self._require_configured_settings()
+        snapshot = self.snapshot()
+        if snapshot is None:
+            msg = "No Plex sync snapshot available."
+            raise PlexSyncError(msg)
+
+        existing = next(
+            (artist for artist in snapshot.artists if artist.rating_key == artist_id),
+            None,
+        )
+        if existing is None:
+            msg = "Artist not found in synchronized library."
+            raise PlexSyncError(msg)
+
+        server = cast(
+            _PlexServer,
+            PlexServer(str(settings.plex_url).rstrip("/"), settings.plex_token.get_secret_value()),
+        )
+        refreshed = _artist_item(
+            server.fetchItem(f"/library/metadata/{artist_id}"),
+            library_id=existing.library_id,
+            library_title=existing.library_title,
+        )
+        updated_artists = [
+            refreshed if artist.rating_key == artist_id else artist for artist in snapshot.artists
+        ]
+        updated_snapshot = snapshot.model_copy(
+            update={"synced_at": datetime.now(UTC), "artists": updated_artists}
+        )
+        self._store.save(updated_snapshot)
+        with self._lock:
+            self._status = updated_snapshot.status()
+        return updated_snapshot
 
     def _run_background(self) -> None:
         """Execute a background synchronization job."""
@@ -312,11 +352,13 @@ class PlexLibrarySyncService:
 
 def _artist_item(artist: Any, *, library_id: str, library_title: str) -> SyncedArtist:
     """Return a persisted artist item."""
+    summary = _optional_string(getattr(artist, "summary", None))
     return SyncedArtist(
         rating_key=_string(getattr(artist, "ratingKey", "")),
         title=_string(getattr(artist, "title", "Untitled")),
         guid=_optional_string(getattr(artist, "guid", None)),
-        summary_present=bool(_optional_string(getattr(artist, "summary", None))),
+        summary=summary,
+        summary_present=bool(summary),
         library_id=library_id,
         library_title=library_title,
     )

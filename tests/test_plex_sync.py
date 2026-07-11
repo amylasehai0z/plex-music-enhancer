@@ -42,12 +42,12 @@ class FakeAlbum:
 class FakeArtist:
     """Fake Plex artist."""
 
-    def __init__(self) -> None:
+    def __init__(self, summary: str = "An influential artist biography.") -> None:
         """Create a fake Plex artist."""
         self.ratingKey = "100"
         self.title = "Nina Simone"
         self.guid = "plex://artist/100"
-        self.summary = "An influential artist biography."
+        self.summary = summary
 
 
 class _FakeTag:
@@ -104,6 +104,11 @@ class FakePlexServer:
         self.token = token
         self.library = FakeLibrary()
 
+    def fetchItem(self, key: str) -> FakeArtist:  # noqa: N802
+        """Return a refreshed fake artist."""
+        assert key == "/library/metadata/100"
+        return FakeArtist(summary="Refreshed Plex artist biography.")
+
 
 class FailingPlexServer:
     """Fake failing Plex server."""
@@ -140,9 +145,30 @@ def test_plex_sync_persists_music_library_snapshot(monkeypatch, tmp_path: Path) 
     snapshot = restarted.snapshot()
     assert snapshot is not None
     assert snapshot.artists[0].summary_present is True
+    assert snapshot.artists[0].summary == "An influential artist biography."
     assert snapshot.albums[0].summary_present is True
     assert snapshot.albums[0].genres == ["Jazz"]
     assert snapshot.albums[0].cover_url == "/library/metadata/200/thumb"
+
+
+def test_plex_sync_refreshes_one_artist(monkeypatch, tmp_path: Path) -> None:
+    """Refreshing one artist should update only that artist in the persisted snapshot."""
+    monkeypatch.setattr("plex_music_enhancer.plex.sync.PlexServer", FakePlexServer)
+    service = PlexLibrarySyncService(
+        settings=_settings(), store=PlexSyncStore(tmp_path / "sync.json")
+    )
+    service.sync_now()
+
+    snapshot = service.refresh_artist("100")
+
+    assert snapshot.artists[0].summary == "Refreshed Plex artist biography."
+    assert snapshot.artists[0].summary_present is True
+    restarted = PlexLibrarySyncService(
+        settings=_settings(), store=PlexSyncStore(tmp_path / "sync.json")
+    )
+    persisted = restarted.snapshot()
+    assert persisted is not None
+    assert persisted.artists[0].summary == "Refreshed Plex artist biography."
 
 
 def test_plex_sync_reports_failures_without_exposing_token(monkeypatch, tmp_path: Path) -> None:

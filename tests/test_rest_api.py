@@ -50,6 +50,7 @@ from plex_music_enhancer.web.dependencies import (
     get_configuration_api_service,
     get_plex_sync_service,
     get_review_api_service,
+    get_settings,
 )
 
 pytestmark = pytest.mark.filterwarnings(
@@ -280,6 +281,10 @@ def test_album_endpoints_use_plex_sync_snapshot() -> None:
     app = create_app()
     app.dependency_overrides[get_plex_sync_service] = lambda: _FakePlexSyncService()
     app.dependency_overrides[get_album_review_service] = lambda: _FakeAlbumReviewService()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        plex_url="http://plex:32400",
+    )
     client = TestClient(app)
 
     albums = client.get("/api/v1/albums")
@@ -318,6 +323,10 @@ def test_artist_endpoints_use_plex_sync_snapshot() -> None:
     app = create_app()
     app.dependency_overrides[get_plex_sync_service] = lambda: _FakePlexSyncService()
     app.dependency_overrides[get_album_review_service] = lambda: _FakeAlbumReviewService()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        plex_url="http://plex:32400",
+    )
     client = TestClient(app)
 
     artists = client.get("/api/v1/artists")
@@ -331,7 +340,12 @@ def test_artist_endpoints_use_plex_sync_snapshot() -> None:
             "library": "Music",
             "albumCount": 2,
             "trackCount": 3,
-            "summaryPresent": False,
+            "summaryPresent": True,
+            "summary": "Existing artist biography.",
+            "reviewCount": 1,
+            "plexUrl": (
+                "http://plex:32400/web/index.html#!/details?key=%2Flibrary%2Fmetadata%2F100"
+            ),
             "plannedAction": None,
         }
     ]
@@ -340,9 +354,29 @@ def test_artist_endpoints_use_plex_sync_snapshot() -> None:
     assert payload["title"] == "Nina Simone"
     assert payload["albumCount"] == 2
     assert payload["trackCount"] == 3
+    assert payload["summary"] == "Existing artist biography."
+    assert payload["summaryPresent"] is True
+    assert payload["reviewCount"] == 1
+    assert payload["plexUrl"].endswith("%2Flibrary%2Fmetadata%2F100")
     assert [album["title"] for album in payload["albums"]] == ["Pastel Blues", "Wild Is the Wind"]
     assert payload["tracks"] == ["Be My Husband", "Sinnerman", "Wild Is the Wind"]
     assert payload["reviews"][0]["content"]["rating"] == 88
+
+
+def test_artist_refresh_endpoint_updates_one_artist() -> None:
+    """Artist refresh should return the updated single-artist snapshot entry."""
+    service = _FakePlexSyncService()
+    app = create_app()
+    app.dependency_overrides[get_plex_sync_service] = lambda: service
+    app.dependency_overrides[get_album_review_service] = lambda: _FakeAlbumReviewService()
+    client = TestClient(app)
+
+    response = client.post("/api/v1/artists/100/refresh")
+
+    assert response.status_code == 200
+    assert service.refreshed_artist_id == "100"
+    assert response.json()["summary"] == "Refreshed biography from Plex."
+    assert response.json()["summaryPresent"] is True
 
 
 def test_error_handler_maps_api_errors() -> None:
@@ -496,6 +530,10 @@ class _FakeApplyService:
 class _FakePlexSyncService:
     """Fake Plex sync API service."""
 
+    def __init__(self) -> None:
+        """Create a fake sync service."""
+        self.refreshed_artist_id: str | None = None
+
     def start(self) -> PlexSyncStatusResponse:
         """Return fake running status."""
         return PlexSyncStatusResponse(
@@ -536,6 +574,8 @@ class _FakePlexSyncService:
                     rating_key="100",
                     title="Nina Simone",
                     guid="plex://artist/100",
+                    summary="Existing artist biography.",
+                    summary_present=True,
                     library_id="1",
                     library_title="Music",
                 )
@@ -601,6 +641,23 @@ class _FakePlexSyncService:
                     library_title="Music",
                 ),
             ],
+        )
+
+    def refresh_artist(self, artist_id: str) -> PlexSyncSnapshot:
+        """Return a fake refreshed snapshot."""
+        self.refreshed_artist_id = artist_id
+        snapshot = self.snapshot()
+        return snapshot.model_copy(
+            update={
+                "artists": [
+                    snapshot.artists[0].model_copy(
+                        update={
+                            "summary": "Refreshed biography from Plex.",
+                            "summary_present": True,
+                        }
+                    )
+                ]
+            }
         )
 
 
