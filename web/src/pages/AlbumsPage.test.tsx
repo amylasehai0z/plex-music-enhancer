@@ -144,7 +144,7 @@ afterEach(() => {
 });
 
 describe("AlbumsPage", () => {
-  it("renders synced albums with search, detail data and review generation", async () => {
+  it("renders synced albums with detail data and review navigation", async () => {
     const fetchMock = stubAlbumsApi();
 
     renderPage();
@@ -169,6 +169,14 @@ describe("AlbumsPage", () => {
         "/review-workflow?target=album&artist=Nina%20Simone&album=Pastel%20Blues&run=1",
       );
     });
+  });
+
+  it("searches albums and starts review generation", async () => {
+    const fetchMock = stubAlbumsApi();
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Alben" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Album suchen" }), {
       target: { value: "Wild" },
