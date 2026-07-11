@@ -146,8 +146,8 @@ export function ReviewPage() {
   }
 
   function applyCurrentReview() {
-    setApplyStatus({ color: "blue", message: "Übernahme gestartet." });
-    notifications.show({ color: "blue", message: "Übernahme gestartet." });
+    setApplyStatus({ color: "blue", message: "Backup wird erstellt." });
+    notifications.show({ color: "blue", message: "Backup wird erstellt." });
     apply.mutate(
       {
         target,
@@ -173,9 +173,11 @@ export function ReviewPage() {
             });
             return;
           }
-          setApplyStatus({ color: "teal", message: "Plex-Verifikation erfolgreich." });
+          setApplyStatus({ color: "teal", message: "Plex bestätigt Änderung." });
+          notifications.show({ color: "teal", message: "Backup erfolgreich." });
+          notifications.show({ color: "teal", message: "Plex wird aktualisiert." });
           notifications.show({ color: "teal", message: "Plex aktualisiert." });
-          notifications.show({ color: "teal", message: "Plex-Verifikation erfolgreich." });
+          notifications.show({ color: "teal", message: "Plex bestätigt Änderung." });
           notifications.show({ color: "teal", message: "Review erfolgreich übernommen." });
         },
         onError: (error) => {

@@ -55,6 +55,7 @@ Volumes:
 | --- | --- | --- |
 | `./docker/config` | `/config` | `.env` and persistent configuration |
 | `./docker/cache` | `/cache` | provider and knowledge cache |
+| `./docker/exports` | `/config/exports` | apply backups and audit records |
 | `./docker/logs` | `/logs` | prompt and review debug logs |
 | `./docker/music` | `/music` | optional read-only music mount |
 
@@ -91,8 +92,11 @@ Supported container variables:
 | `PLEX_ENHANCER_PLEX_TOKEN` | Plex token |
 | `PLEX_ENHANCER_CONFIG` | configuration directory or dotenv file, default `/config` |
 | `PLEX_ENHANCER_CACHE` | cache path, default `/cache` |
+| `PLEX_ENHANCER_EXPORTS` | persistent export path for backups and audits, default `/config/exports` |
 | `PLEX_ENHANCER_LOG_LEVEL` | logging level |
 | `PLEX_ENHANCER_WEB__PORT` | internal web port, default `8080` |
+| `PUID` | runtime user id for writable mounted volumes, default `10001` |
+| `PGID` | runtime group id for writable mounted volumes, default `10001` |
 
 No secrets are built into the image. Use environment variables or `/config/.env`.
 
@@ -150,7 +154,7 @@ Automatic container updates are not documented or recommended.
 2. Create a container from `ghcr.io/amylasehai0z/plex-music-enhancer:latest`.
 3. Set container port `8080`.
 4. Publish host port `1008` to container port `8080`.
-5. Mount `/config`, `/cache` and `/logs`.
+5. Mount `/config`, `/cache`, `/config/exports` and `/logs`.
 6. Set environment variables.
 7. Enable restart policy `unless-stopped`.
 8. Start the container and check the health status.
@@ -169,6 +173,7 @@ Volumes:
 | --- | --- |
 | `/config` | configuration and optional `.env` |
 | `/cache` | provider cache |
+| `/config/exports` | apply backups and audit records |
 | `/logs` | prompt and review logs |
 | `/music` | optional read-only music mount |
 
@@ -182,6 +187,9 @@ PLEX_ENHANCER_WEB__PORT=8080
 PLEX_ENHANCER_LOG_LEVEL=INFO
 PLEX_ENHANCER_CONFIG=/config
 PLEX_ENHANCER_CACHE=/cache
+PLEX_ENHANCER_EXPORTS=/config/exports
+PUID=10001
+PGID=10001
 ```
 
 Healthcheck:
@@ -215,7 +223,7 @@ changes.
 2. Create a project from `docker-compose.yml`, or create a container from
    `ghcr.io/amylasehai0z/plex-music-enhancer:latest`.
 3. Map host port `1008` to container port `8080`.
-4. Mount persistent folders for `/config`, `/cache` and `/logs`.
+4. Mount persistent folders for `/config`, `/cache`, `/config/exports` and `/logs`.
 5. Set `PLEX_URL`, `PLEX_TOKEN` and `OPENAI_API_KEY`.
 6. Use restart policy `unless-stopped`.
 7. Check the health status and open `http://<synology>:1008/`.

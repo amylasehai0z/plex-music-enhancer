@@ -79,6 +79,7 @@ zusätzliche API erforderlich.
 | --- | --- |
 | `/config` | Konfiguration und optionale `.env` |
 | `/cache` | Provider- und Knowledge-Cache |
+| `/config/exports` | Apply-Backups und Audit-Datensätze |
 | `/logs` | Prompt- und Review-Debugdateien |
 | `/music` | optionaler read-only Musikpfad |
 
@@ -93,8 +94,11 @@ zusätzliche API erforderlich.
 | `PLEX_ENHANCER_PLEX_TOKEN` | Plex Token |
 | `PLEX_ENHANCER_CONFIG` | Konfigurationsordner oder `.env`-Datei, Standard `/config` |
 | `PLEX_ENHANCER_CACHE` | Cachepfad, Standard `/cache` |
+| `PLEX_ENHANCER_EXPORTS` | persistenter Exportpfad für Backups und Audits, Standard `/config/exports` |
 | `PLEX_ENHANCER_LOG_LEVEL` | Log-Level |
 | `PLEX_ENHANCER_WEB__PORT` | interner Webport, Standard `8080` |
+| `PUID` | Laufzeit-User-ID für beschreibbare Volumes, Standard `10001` |
+| `PGID` | Laufzeit-Gruppen-ID für beschreibbare Volumes, Standard `10001` |
 
 Secrets gehören nicht ins Image. Verwenden Sie Container-Environment oder
 `/config/.env`.
@@ -142,7 +146,7 @@ Container neu starten
 2. Image `ghcr.io/amylasehai0z/plex-music-enhancer:latest` auswählen.
 3. Container-Port `8080` setzen.
 4. Host-Port `1008` auf Container-Port `8080` mappen.
-5. Volumes für `/config`, `/cache` und `/logs` einhängen.
+5. Volumes für `/config`, `/cache`, `/config/exports` und `/logs` einhängen.
 6. Environment-Variablen setzen.
 7. Restart Policy `unless-stopped` verwenden.
 8. Container starten und Healthcheck prüfen.
@@ -168,6 +172,7 @@ ghcr.io/amylasehai0z/plex-music-enhancer:v1.0.1
 | --- | --- |
 | `/config` | Konfiguration und optionale `.env` |
 | `/cache` | Provider- und Knowledge-Cache |
+| `/config/exports` | Apply-Backups und Audit-Datensätze |
 | `/logs` | Prompt- und Review-Debugdateien |
 | `/music` | optionaler read-only Musikpfad |
 
@@ -181,6 +186,9 @@ PLEX_ENHANCER_WEB__PORT=8080
 PLEX_ENHANCER_LOG_LEVEL=INFO
 PLEX_ENHANCER_CONFIG=/config
 PLEX_ENHANCER_CACHE=/cache
+PLEX_ENHANCER_EXPORTS=/config/exports
+PUID=10001
+PGID=10001
 ```
 
 ### Port-Mapping und Healthcheck

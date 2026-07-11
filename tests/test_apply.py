@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -164,7 +165,9 @@ def test_apply_service_does_not_write_when_backup_fails(tmp_path: Path) -> None:
     assert result.backup_created is False
     assert result.write_successful is False
     assert result.audit_stored is False
-    assert "Unable to create backup" in result.message
+    assert "Plex wurde nicht geändert." in result.message
+    assert "Backup konnte nicht erstellt werden" in result.message
+    assert str(tmp_path / "exports" / "backups") in result.message
     assert album.calls == []
 
 
@@ -316,7 +319,46 @@ def test_backup_store_creates_backup_file(tmp_path: Path) -> None:
     assert path.exists()
     assert path.parent == tmp_path / "exports" / "backups"
     assert backup.previous_summary == "Aktuelle Plex-Zusammenfassung."
+    assert backup.proposed_summary == _german_summary()
+    assert backup.source == "album_summary"
     assert '"previousSummary": "Aktuelle Plex-Zusammenfassung."' in path.read_text()
+
+
+def test_backup_store_defaults_to_persistent_config_exports(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Default backups must use the configured persistent runtime path, not cwd."""
+    config_dir = tmp_path / "config"
+    monkeypatch.setenv("PLEX_ENHANCER_CONFIG", str(config_dir))
+    monkeypatch.delenv("PLEX_ENHANCER_EXPORTS", raising=False)
+    store = BackupStore()
+
+    backup = store.create_backup(_artist_review_document())
+
+    path = Path(backup.path)
+    assert path.parent == config_dir / "exports" / "backups"
+    assert path.name.startswith("artist_100_")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["ratingKey"] == "100"
+    assert payload["artist"] == "Bonnie Tyler"
+    assert payload["previousSummary"] == "Englische Plex-Biografie."
+    assert payload["proposedSummary"] == _german_summary()
+    assert payload["source"] == "artist_biography"
+
+
+def test_backup_store_honors_explicit_exports_directory(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """An explicit export directory should override the config-derived default."""
+    exports_dir = tmp_path / "persistent" / "exports"
+    monkeypatch.setenv("PLEX_ENHANCER_CONFIG", str(tmp_path / "config"))
+    monkeypatch.setenv("PLEX_ENHANCER_EXPORTS", str(exports_dir))
+
+    backup = BackupStore().create_backup(_review_document())
+
+    assert Path(backup.path).parent == exports_dir / "backups"
 
 
 def test_audit_store_creates_audit_file(tmp_path: Path) -> None:

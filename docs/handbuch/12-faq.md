@@ -286,11 +286,11 @@ Review verändert Plex nicht. Apply schreibt eine genehmigte Zusammenfassung mit
 
 ### 68. Kann ich Änderungen rückgängig machen?
 
-Apply legt Backups unter `exports/backups/` an. Diese Backups sind die Grundlage für eine manuelle Wiederherstellung.
+Apply legt Backups im Docker-Standard unter `/config/exports/backups/` an. Diese Backups sind die Grundlage für eine manuelle Wiederherstellung.
 
 ### 69. Wo liegen Audit-Dateien?
 
-Audit-Daten des Apply-Workflows liegen unter `exports/audit/`.
+Audit-Daten des Apply-Workflows liegen im Docker-Standard unter `/config/exports/audit/`.
 
 ### 70. Was passiert, wenn Verifikation fehlschlägt?
 
@@ -357,4 +357,3 @@ Ja. Nutzen Sie das Skript unter `docs/pdf/build.sh`, wenn Pandoc installiert ist
 ### 85. Ist das Handbuch auch für gedruckte Nutzung gedacht?
 
 Ja. Die Kapitelstruktur ist bewusst linear und PDF-freundlich.
-

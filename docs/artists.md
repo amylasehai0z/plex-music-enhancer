@@ -53,9 +53,9 @@ The artist workflow:
 
 Artist apply uses the same safety controls as album apply:
 
-- current Plex summary backup under `exports/backups/`
+- current Plex summary backup under `/config/exports/backups/` in Docker
 - PlexAPI batch edit workflow
 - reload verification
-- audit record under `exports/audit/`
+- audit record under `/config/exports/audit/` in Docker
 
 No batch artist mode or rollback command is implemented yet.

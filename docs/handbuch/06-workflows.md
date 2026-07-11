@@ -114,7 +114,7 @@ Vor Apply prüft das System:
 
 ## 6.12 Rollback-Strategie
 
-v1.0 speichert Backups vor Apply. Ein automatischer Rollback-Befehl ist nicht der Hauptworkflow. Wenn Sie zurücksetzen müssen, nutzen Sie die Backup-Datei unter `exports/backups/` als Quelle.
+v1.0 speichert Backups vor Apply. Ein automatischer Rollback-Befehl ist nicht der Hauptworkflow. Wenn Sie zurücksetzen müssen, nutzen Sie die Backup-Datei unter `/config/exports/backups/` als Quelle.
 
 ## 6.13 Best Practices
 

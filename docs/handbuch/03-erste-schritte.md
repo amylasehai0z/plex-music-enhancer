@@ -102,8 +102,8 @@ Apply erstellt ein Backup, schreibt den Text, lädt das Album neu und prüft den
 Nach Apply können Sie das Album in Plex öffnen. Zusätzlich liegen Audit- und Backup-Dateien unter:
 
 ```text
-exports/backups/
-exports/audit/
+/config/exports/backups/
+/config/exports/audit/
 ```
 
 ## 3.9 Häufige Entscheidungen
@@ -115,4 +115,3 @@ exports/audit/
 | Quellen wirken falsch | Skip und mit `match` prüfen |
 | Sprache ist falsch | `--translate` nutzen |
 | Text klingt holprig | `--improve` nutzen |
-

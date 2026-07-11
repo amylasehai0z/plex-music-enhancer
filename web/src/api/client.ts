@@ -71,6 +71,8 @@ export class ApiClient {
       const message =
         typeof payload === "object" && payload !== null && "message" in payload
           ? String(payload.message)
+          : typeof payload === "object" && payload !== null && "detail" in payload
+            ? String(payload.detail)
           : `Request failed with status ${response.status}`;
       throw new ApiError(message, response.status, payload);
     }

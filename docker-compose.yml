@@ -17,8 +17,11 @@ services:
       PLEX_ENHANCER_PLEX_URL: ${PLEX_ENHANCER_PLEX_URL:-}
       PLEX_ENHANCER_PLEX_TOKEN: ${PLEX_ENHANCER_PLEX_TOKEN:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PUID: ${PUID:-10001}
+      PGID: ${PGID:-10001}
       PLEX_ENHANCER_CONFIG: ${PLEX_ENHANCER_CONFIG:-/config}
       PLEX_ENHANCER_CACHE: ${PLEX_ENHANCER_CACHE:-/cache}
+      PLEX_ENHANCER_EXPORTS: ${PLEX_ENHANCER_EXPORTS:-/config/exports}
       PLEX_ENHANCER_LOG_LEVEL: ${PLEX_ENHANCER_LOG_LEVEL:-INFO}
       PLEX_ENHANCER_WEB__PORT: 8080
     labels:
@@ -28,6 +31,7 @@ services:
     volumes:
       - ./docker/config:/config
       - ./docker/cache:/cache
+      - ./docker/exports:/config/exports
       - ./docker/logs:/logs
       - ./docker/music:/music:ro
     healthcheck:

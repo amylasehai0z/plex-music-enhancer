@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from plex_music_enhancer.runtime_paths import runtime_audit_dir
 from plex_music_enhancer.utils.files import write_text_atomic
 
 ApplyStatus = Literal["SUCCESS", "FAILED"]
@@ -41,9 +42,14 @@ class ApplyAuditRecord(BaseModel):
 class AuditStore:
     """Persist apply audit records as JSON documents."""
 
-    def __init__(self, directory: Path | str = Path("exports/audit")) -> None:
+    def __init__(self, directory: Path | str | None = None) -> None:
         """Create an audit store."""
-        self._directory = Path(directory)
+        self._directory = Path(directory) if directory is not None else runtime_audit_dir()
+
+    @property
+    def directory(self) -> Path:
+        """Return the directory where audit records are written."""
+        return self._directory
 
     def create_record(
         self,

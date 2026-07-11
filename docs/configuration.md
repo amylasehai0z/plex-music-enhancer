@@ -127,16 +127,20 @@ Verarbeitungsdatenbank:
 Projektbezogene Exporte:
 
 ```text
-exports/
+/config/exports/
 ```
 
 Darin liegen zum Beispiel:
 
-- `exports/previews/`
-- `exports/backups/`
-- `exports/audit/`
-- `exports/library/`
-- `exports/context/`
+- `/config/exports/previews/`
+- `/config/exports/backups/`
+- `/config/exports/audit/`
+- `/config/exports/library/`
+- `/config/exports/context/`
+
+Im Container ist `/config/exports` der Standard, damit Backups und Audit-Daten
+nicht vom aktuellen Arbeitsverzeichnis abhängen. Der Pfad kann mit
+`PLEX_ENHANCER_EXPORTS` überschrieben werden.
 
 ## Prompt-Versionen
 

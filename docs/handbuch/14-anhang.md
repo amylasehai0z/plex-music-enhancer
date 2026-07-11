@@ -23,8 +23,8 @@ plex-enhancer cache stats
 | `exports/libraries.json` | Bibliotheksstatistik aus `scan --export-json`. |
 | `exports/artists.json` | Künstlerexport aus `scan artists --export-json`. |
 | `exports/albums.json` | Albumexport aus `scan albums --export-json`. |
-| `exports/audit/` | Audit-Datensätze aus Apply- und Analyseabläufen. |
-| `exports/backups/` | Sicherungen alter Plex-Zusammenfassungen. |
+| `/config/exports/audit/` | Audit-Datensätze aus Apply- und Analyseabläufen im Docker-Standard. |
+| `/config/exports/backups/` | Sicherungen alter Plex-Zusammenfassungen im Docker-Standard. |
 | `exports/context/` | Gespeicherte Kontextdokumente. |
 | `exports/previews/` | Gespeicherte Preview-Dokumente. |
 | `exports/jobs/` | Fortschrittsdaten für Resume-fähige Abläufe. |

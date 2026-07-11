@@ -93,8 +93,7 @@ describe("ReviewPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
-    expect(await screen.findAllByText("Plex-Verifikation erfolgreich.")).not.toHaveLength(0);
-    expect(screen.getByText("Review erfolgreich übernommen.")).toBeInTheDocument();
+    expect(await screen.findAllByText("Plex bestätigt Änderung.")).not.toHaveLength(0);
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/v1/apply", expect.objectContaining({ method: "POST" }));
     });
@@ -124,6 +123,45 @@ describe("ReviewPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(await screen.findAllByText("Plex-Verifikation fehlgeschlagen.")).not.toHaveLength(0);
+    expect(screen.queryByText("Review erfolgreich übernommen.")).not.toBeInTheDocument();
+  });
+
+  it("shows backup permission errors from the backend", async () => {
+    const backendMessage =
+      "Plex wurde nicht geändert.\nBackup konnte nicht erstellt werden: /config/exports/backups.\nUnderlying exception: [Errno 13] Permission denied: '/config/exports'";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/apply")) {
+        return new Response(JSON.stringify({ detail: backendMessage }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(reviewResponse()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+
+    const submitButton = await screen.findByRole("button", { name: /review erzeugen/i });
+    fireEvent.submit(submitButton.closest("form") as HTMLFormElement);
+    await screen.findByRole("heading", { name: "Credo" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/apply", expect.objectContaining({ method: "POST" }));
+    });
+    expect(
+      await screen.findAllByText((_, node) =>
+        Boolean(
+          node?.textContent?.includes("Plex wurde nicht geändert.") &&
+            node.textContent.includes("/config/exports/backups"),
+        ),
+      ),
+    ).not.toHaveLength(0);
     expect(screen.queryByText("Review erfolgreich übernommen.")).not.toBeInTheDocument();
   });
 });

@@ -14,11 +14,13 @@ Vorschau, Planung, Audit und Review sind zunächst sicher. Verwenden Sie `apply`
 
 ## 4. Ist ein Backup vorhanden?
 
-Ja. Vor Apply wird der bisherige Text unter `exports/backups/` gespeichert.
+Ja. Vor Apply wird der bisherige Text im persistenten Exportpfad gespeichert,
+im Docker-Standard unter `/config/exports/backups/`.
 
 ## 5. Was ist ein Audit?
 
-Ein Audit ist ein JSON-Protokoll eines Apply-Vorgangs unter `exports/audit/`.
+Ein Audit ist ein JSON-Protokoll eines Apply-Vorgangs. Im Docker-Standard liegt
+es unter `/config/exports/audit/`.
 
 ## 6. Warum ist GPT so vorsichtig?
 
@@ -158,11 +160,12 @@ Ja, in `prompts/`. Danach sollten Tests und Vorschau geprüft werden.
 
 ## 39. Wo liegen Exporte?
 
-Unter `exports/`.
+Im Container unter `/config/exports/`. Der Pfad kann mit
+`PLEX_ENHANCER_EXPORTS` angepasst werden.
 
 ## 40. Wo liegen Backups?
 
-Unter `exports/backups/`.
+Im Container unter `/config/exports/backups/`.
 
 ## 41. Wo liegt der lokale Cache?
 
@@ -211,4 +214,3 @@ Weil nur ein Mensch Kontext, Geschmack und Bibliotheksziel endgültig beurteilen
 ## 52. Kann ich OpenAI-Kosten begrenzen?
 
 Nutzen Sie kleine Testläufe, `--limit`, Cache und Preview, bevor Sie große Bibliotheken verarbeiten.
-

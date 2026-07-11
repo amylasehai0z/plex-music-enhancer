@@ -9,6 +9,7 @@ from re import sub
 from pydantic import BaseModel, ConfigDict, Field
 
 from plex_music_enhancer.review import ReviewDocument
+from plex_music_enhancer.runtime_paths import runtime_backups_dir
 from plex_music_enhancer.utils.files import write_text_atomic
 
 
@@ -22,17 +23,24 @@ class SummaryBackup(BaseModel):
     album: str
     rating_key: str = Field(serialization_alias="ratingKey")
     previous_summary: str = Field(serialization_alias="previousSummary")
+    proposed_summary: str = Field(serialization_alias="proposedSummary")
     provider: str
     model: str
+    source: str
     path: str
 
 
 class BackupStore:
     """Persist apply backups as JSON documents."""
 
-    def __init__(self, directory: Path | str = Path("exports/backups")) -> None:
+    def __init__(self, directory: Path | str | None = None) -> None:
         """Create a backup store."""
-        self._directory = Path(directory)
+        self._directory = Path(directory) if directory is not None else runtime_backups_dir()
+
+    @property
+    def directory(self) -> Path:
+        """Return the directory where backup records are written."""
+        return self._directory
 
     def create_backup(self, review: ReviewDocument) -> SummaryBackup:
         """Create a backup file for the current Plex album summary."""
@@ -53,8 +61,10 @@ class BackupStore:
             album=album,
             rating_key=context.plex.rating_key,
             previous_summary=review.current_summary,
+            proposed_summary=review.proposed_summary,
             provider=generated.provider,
             model=generated.model,
+            source=generated.prompt_name,
             path=str(path),
         )
         write_text_atomic(path, backup.model_dump_json(indent=2, by_alias=True) + "\n")
@@ -70,10 +80,8 @@ class BackupStore:
     ) -> Path:
         """Return a deterministic, collision-resistant backup path."""
         timestamp = created_at.strftime("%Y%m%d%H%M%S%f")
-        filename = (
-            f"{_safe_segment(artist)}-{_safe_segment(album)}-"
-            f"{_safe_segment(rating_key)}-{timestamp}.json"
-        )
+        target = "artist" if album == "artist" else "album"
+        filename = f"{target}_{_safe_segment(rating_key)}_{timestamp}.json"
         return self._directory / filename
 
 

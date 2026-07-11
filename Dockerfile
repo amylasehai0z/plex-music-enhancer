@@ -36,17 +36,23 @@ LABEL org.opencontainers.image.title="Plex Music Enhancer" \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PUID=10001 \
+    PGID=10001 \
     PLEX_ENHANCER_WEB__PORT=8080 \
     PLEX_ENHANCER_CONFIG=/config \
     PLEX_ENHANCER_CACHE=/cache \
+    PLEX_ENHANCER_EXPORTS=/config/exports \
     PLEX_ENHANCER_LOG_LEVEL=INFO
 
 WORKDIR /app
 
-RUN groupadd --system --gid 10001 plexenhancer \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 plexenhancer \
     && useradd --system --uid 10001 --gid plexenhancer --home-dir /home/plexenhancer --create-home plexenhancer \
-    && mkdir -p /config /cache /logs /music /home/plexenhancer/.plex-enhancer \
-    && chown -R plexenhancer:plexenhancer /config /cache /logs /music /home/plexenhancer
+    && mkdir -p /config/exports /cache /logs /exports /music /home/plexenhancer/.plex-enhancer \
+    && chown -R plexenhancer:plexenhancer /config /cache /logs /exports /music /home/plexenhancer
 
 COPY pyproject.toml README.md LICENSE ./
 COPY prompts ./prompts
@@ -58,9 +64,7 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install ".[web,ai,metadata]" \
     && chmod +x /usr/local/bin/plex-enhancer-entrypoint
 
-USER plexenhancer
-
-VOLUME ["/config", "/cache", "/logs", "/music"]
+VOLUME ["/config", "/cache", "/logs", "/exports", "/music"]
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

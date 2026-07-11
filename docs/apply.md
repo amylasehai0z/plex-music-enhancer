@@ -23,14 +23,20 @@ For one selected album, the command:
 1. Builds an `AlbumContext` through the enrichment pipeline.
 2. Generates a summary through the configured AI provider.
 3. Runs the review quality checks.
-4. Stores the current Plex summary under `exports/backups/`.
+4. Stores the current Plex summary under the persistent export path
+   (`/config/exports/backups/` in Docker).
 5. Writes the generated summary with PlexAPI batch edits.
 6. Reloads the album from Plex and verifies the stored summary.
-7. Stores an audit record under `exports/audit/`.
+7. Stores an audit record under the persistent export path
+   (`/config/exports/audit/` in Docker).
 
 If quality validation fails, Plex is not modified and no backup is created. If
 the write or verification fails after the backup has been created, the backup is
 kept and the audit record is marked as failed.
+
+The export root defaults to `/config/exports` in containers and can be
+overridden with `PLEX_ENHANCER_EXPORTS`. It should always point to a writable,
+persistent volume.
 
 ## Plex Write Workflow
 
@@ -58,4 +64,4 @@ Each completed write attempt records:
 - verification status
 - expected and verified summary values
 
-No batch mode, rollback command, or artist writing is implemented yet.
+No batch mode or rollback command is implemented yet.

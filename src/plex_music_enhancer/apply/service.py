@@ -176,9 +176,15 @@ class ApplyService:
         try:
             backup = self._backup_store.create_backup(review)
         except Exception as exc:
+            backup_directory = getattr(self._backup_store, "directory", None)
+            path_hint = f": {backup_directory}" if backup_directory is not None else ""
             return self._failed_without_write(
                 review=review,
-                message=f"Unable to create backup. Plex was not modified: {exc}",
+                message=(
+                    "Plex wurde nicht geändert.\n"
+                    f"Backup konnte nicht erstellt werden{path_hint}.\n"
+                    f"Underlying exception: {exc}"
+                ),
             )
 
         message = "Summary written and verified successfully."

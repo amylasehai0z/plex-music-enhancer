@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_dockerfile_uses_multistage_non_root_web_runtime() -> None:
-    """Dockerfile should build frontend assets and run the web app as non-root."""
+    """Dockerfile should build frontend assets and drop to a non-root app user."""
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
     assert "FROM node:22-bookworm-slim AS frontend" in dockerfile
@@ -18,13 +18,17 @@ def test_dockerfile_uses_multistage_non_root_web_runtime() -> None:
     assert "npm run build" in dockerfile
     assert "FROM python:3.12-slim AS runtime" in dockerfile
     assert 'python -m pip install ".[web,ai,metadata]"' in dockerfile
-    assert "USER plexenhancer" in dockerfile
+    assert "gosu" in dockerfile
+    assert "PUID=10001" in dockerfile
+    assert "PGID=10001" in dockerfile
     assert 'CMD ["serve", "--host", "0.0.0.0"]' in dockerfile
     assert "EXPOSE 8080" in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "org.opencontainers.image.source" in dockerfile
     assert "org.opencontainers.image.authors" in dockerfile
     assert "PLEX_ENHANCER_CONFIG=/config" in dockerfile
+    assert "PLEX_ENHANCER_EXPORTS=/config/exports" in dockerfile
+    assert 'VOLUME ["/config", "/cache", "/logs", "/exports", "/music"]' in dockerfile
 
 
 def test_docker_compose_maps_synology_port_and_volumes() -> None:
@@ -38,9 +42,16 @@ def test_docker_compose_maps_synology_port_and_volumes() -> None:
     assert "${PLEX_ENHANCER_HOST_PORT:-1008}:8080" in service["ports"]
     assert "./docker/config:/config" in service["volumes"]
     assert "./docker/cache:/cache" in service["volumes"]
+    assert "./docker/exports:/config/exports" in service["volumes"]
     assert "./docker/logs:/logs" in service["volumes"]
+    assert service["environment"]["PUID"] == "${PUID:-10001}"
+    assert service["environment"]["PGID"] == "${PGID:-10001}"
     assert service["environment"]["PLEX_ENHANCER_WEB__PORT"] == 8080
     assert service["environment"]["PLEX_ENHANCER_CONFIG"] == "${PLEX_ENHANCER_CONFIG:-/config}"
+    assert (
+        service["environment"]["PLEX_ENHANCER_EXPORTS"]
+        == "${PLEX_ENHANCER_EXPORTS:-/config/exports}"
+    )
     assert service["labels"]["io.portainer.accesscontrol.public"] == "false"
     assert "healthcheck" in service
 
@@ -57,6 +68,9 @@ def test_env_example_documents_portainer_container_defaults() -> None:
         "PLEX_ENHANCER_LOG_LEVEL=INFO",
         "PLEX_ENHANCER_CONFIG=/config",
         "PLEX_ENHANCER_CACHE=/cache",
+        "PLEX_ENHANCER_EXPORTS=/config/exports",
+        "PUID=10001",
+        "PGID=10001",
     ]
 
     for variable in expected_variables:
@@ -71,6 +85,10 @@ def test_container_entrypoint_supports_synology_environment_aliases() -> None:
     assert "PLEX_TOKEN" in entrypoint
     assert "PLEX_ENHANCER_CONFIG" in entrypoint
     assert "PLEX_ENHANCER_CACHE" in entrypoint
+    assert "PLEX_ENHANCER_EXPORTS" in entrypoint
+    assert "PUID" in entrypoint
+    assert "PGID" in entrypoint
+    assert "gosu" in entrypoint
     assert "/logs/plex_review.log" in entrypoint
 
 
