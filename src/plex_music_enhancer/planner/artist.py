@@ -16,7 +16,7 @@ from plex_music_enhancer.plex.audit import SummaryLanguage
 # Same thresholds as Album Planner for consistency
 DEFAULT_GERMAN_IMPROVE_THRESHOLD_WORDS = 60
 MINIMUM_GOOD_SCORE = 60
-MINIMUM_SKIP_SCORE = 80
+MINIMUM_SKIP_SCORE = 75
 
 
 class ArtistPlanningCandidate(Protocol):
@@ -46,8 +46,8 @@ class ArtistEnrichmentPlanner:
         - CREATE: No biography exists
         - TRANSLATE: Existing biography is English
         - IMPROVE: German biography but quality score < 60
-        - REVIEW: German biography with score 60-80 (user decides)
-        - SKIP: German biography with score > 80
+        - REVIEW: German biography with score 60-75 (user decides)
+        - SKIP: German biography with score >= 75
         """
         text = (biography or "").strip()
         if not text:
@@ -86,7 +86,7 @@ class ArtistEnrichmentPlanner:
                     quality=quality,
                 )
 
-            if quality.quality_score <= MINIMUM_SKIP_SCORE:
+            if quality.quality_score < MINIMUM_SKIP_SCORE:
                 return EnrichmentPlan(
                     action=EnrichmentAction.REVIEW,
                     reason=(
@@ -232,7 +232,8 @@ def _analyze_biography_quality(text: str, language: SummaryLanguage) -> ContentQ
         scores["baseline"] = max(40, 100 - len(issues) * 15)
 
     # Aggregate score (weighted average)
-    weights = {"length": 0.25, "structure": 0.25, "language": 0.25, "baseline": 0.25}
+    # Length is more important for biography quality
+    weights = {"length": 0.40, "structure": 0.20, "language": 0.20, "baseline": 0.20}
     quality_score = sum(scores.get(key, 50) * weight for key, weight in weights.items())
     quality_score = round(max(0, min(100, quality_score)))
 
