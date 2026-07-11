@@ -1,7 +1,5 @@
 """Tests for artist enrichment planner."""
 
-import pytest
-
 from plex_music_enhancer.planner.artist import (
     ArtistEnrichmentPlanner,
     _analyze_biography_quality,
@@ -180,7 +178,7 @@ class TestArtistEnrichmentPlanner:
         """Quality report should have consistent structure."""
         planner = ArtistEnrichmentPlanner()
         plan = planner.plan_biography("Some artist biography.")
-        
+
         # Quality report should always be present
         assert plan.quality is not None
         assert 0 <= plan.quality.quality_score <= 100

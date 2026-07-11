@@ -41,7 +41,7 @@ class ArtistEnrichmentPlanner:
 
     def plan_biography(self, biography: str | None) -> EnrichmentPlan:
         """Return the recommended plan for an artist biography.
-        
+
         Mirrors album planning logic but for artist biographies:
         - CREATE: No biography exists
         - TRANSLATE: Existing biography is English
@@ -118,23 +118,50 @@ class ArtistEnrichmentPlanner:
 
 def _estimate_biography_language(text: str) -> SummaryLanguage:
     """Estimate language of artist biography using heuristic patterns.
-    
+
     Mirrors the album planner's language detection but tuned for biographies.
     """
     normalized = text.lower()
 
     # German indicators (weighted)
     german_indicators = [
-        "ü", "ö", "ä", "ß",  # German characters
-        " und ", " ist ", " der ", " die ", " das ", " von ", " in ",
-        " wurde ", " hat ", " sich ", " als ", " mit ", " über ",
+        "ü",
+        "ö",
+        "ä",
+        "ß",  # German characters
+        " und ",
+        " ist ",
+        " der ",
+        " die ",
+        " das ",
+        " von ",
+        " in ",
+        " wurde ",
+        " hat ",
+        " sich ",
+        " als ",
+        " mit ",
+        " über ",
     ]
     german_score = sum(1 for indicator in german_indicators if indicator in normalized)
 
     # English indicators (weighted)
     english_indicators = [
-        " and ", " is ", " the ", " of ", " in ", " was ", " has ", " been ",
-        " as ", " with ", " for ", " on ", " at ", " this ", " that ",
+        " and ",
+        " is ",
+        " the ",
+        " of ",
+        " in ",
+        " was ",
+        " has ",
+        " been ",
+        " as ",
+        " with ",
+        " for ",
+        " on ",
+        " at ",
+        " this ",
+        " that ",
     ]
     english_score = sum(1 for indicator in english_indicators if indicator in normalized)
 
@@ -146,11 +173,9 @@ def _estimate_biography_language(text: str) -> SummaryLanguage:
         return SummaryLanguage.UNKNOWN
 
 
-def _analyze_biography_quality(
-    text: str, language: SummaryLanguage
-) -> ContentQualityReport:
+def _analyze_biography_quality(text: str, language: SummaryLanguage) -> ContentQualityReport:
     """Analyze quality of artist biography text.
-    
+
     Mirrors album quality analysis but adapted for biography context.
     Checks for: length, structure, common pitfalls, style issues.
     """
@@ -182,12 +207,16 @@ def _analyze_biography_quality(
     if language is SummaryLanguage.GERMAN:
         # Check for English words in German text (simple heuristic)
         english_words = [
-            "the ", "and ", "is ", "was ", "has been",
-            "one of", "also known", "best known for",
+            "the ",
+            "and ",
+            "is ",
+            "was ",
+            "has been",
+            "one of",
+            "also known",
+            "best known for",
         ]
-        english_count = sum(
-            1 for word in english_words if word.lower() in text.lower()
-        )
+        english_count = sum(1 for word in english_words if word.lower() in text.lower())
         if english_count > 3:
             issues.append(ContentIssue.MIXED_LANGUAGE)
             scores["language"] = max(50, 100 - english_count * 10)
@@ -204,9 +233,7 @@ def _analyze_biography_quality(
 
     # Aggregate score (weighted average)
     weights = {"length": 0.25, "structure": 0.25, "language": 0.25, "baseline": 0.25}
-    quality_score = sum(
-        scores.get(key, 50) * weight for key, weight in weights.items()
-    )
+    quality_score = sum(scores.get(key, 50) * weight for key, weight in weights.items())
     quality_score = round(max(0, min(100, quality_score)))
 
     # Determine quality level
