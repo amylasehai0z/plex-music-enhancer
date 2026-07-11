@@ -1,6 +1,6 @@
 import { Alert, Button, Grid, Group, Progress, Skeleton, Stack, Table, Text, Title } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { Album, ClipboardCheck, Cpu, Database, Library, RefreshCw, Server, Star, UserRound } from "lucide-react";
+import { Album, ClipboardCheck, Cpu, Database, Library, ListChecks, RefreshCw, Server, Star, UserRound } from "lucide-react";
 
 import { ActivityPanel } from "../components/ActivityPanel";
 import { MetricCard } from "../components/MetricCard";
@@ -10,11 +10,12 @@ import { formatNumber } from "../utils/format";
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
-  const { statistics, providers, configuration, version, plexSync } = useDashboardData();
+  const { statistics, providers, configuration, version, plexSync, batch } = useDashboardData();
   const syncMutation = usePlexSyncMutation();
   const stats = statistics.data;
   const config = configuration.data?.configuration;
   const sync = plexSync.data;
+  const batchStatus = batch.data;
   const provider = providers.data?.find((item) => item.details.type === "ai");
   const userAgentData = navigator as Navigator & { userAgentData?: { platform?: string } };
   const syncRunning = Boolean(sync?.running || syncMutation.isPending);
@@ -166,6 +167,40 @@ export function DashboardPage() {
                 </Table.Tr>
               </Table.Tbody>
             </Table>
+          </section>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, lg: 6 }}>
+          <section className="surface">
+            <Group justify="space-between" align="flex-start">
+              <div>
+                <Title order={2}>Batch Queue</Title>
+                <Text c="dimmed" size="sm">
+                  Sequenzielle Review- und Apply-Verarbeitung.
+                </Text>
+              </div>
+              <StatusPill value={Boolean(batchStatus?.running)} />
+            </Group>
+            <Stack gap="sm" mt="md">
+              <Group grow>
+                <MetricCard label="Wartend" value={formatNumber(batchStatus?.pending)} icon={ListChecks} />
+                <MetricCard label="Abgeschlossen" value={formatNumber(batchStatus?.completed)} icon={ClipboardCheck} />
+                <MetricCard label="Fehler" value={formatNumber(batchStatus?.failed)} icon={Server} />
+              </Group>
+              <Progress value={batchStatus?.progress ?? 0} animated={batchStatus?.running} />
+              <Table>
+                <Table.Tbody>
+                  <Table.Tr>
+                    <Table.Td>Aktiv</Table.Td>
+                    <Table.Td>{batchStatus?.active?.name ?? "kein Batch aktiv"}</Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>Fortschritt</Table.Td>
+                    <Table.Td>{batchStatus?.progress ?? 0}%</Table.Td>
+                  </Table.Tr>
+                </Table.Tbody>
+              </Table>
+              {batch.error ? <Alert color="red">{batch.error.message}</Alert> : null}
+            </Stack>
           </section>
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 6 }}>

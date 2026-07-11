@@ -9,6 +9,7 @@ const AlbumReviewsPage = lazy(() =>
   import("./pages/AlbumReviewsPage").then((module) => ({ default: module.AlbumReviewsPage })),
 );
 const ArtistsPage = lazy(() => import("./pages/ArtistsPage").then((module) => ({ default: module.ArtistsPage })));
+const BatchPage = lazy(() => import("./pages/BatchPage").then((module) => ({ default: module.BatchPage })));
 const DeveloperPage = lazy(() =>
   import("./pages/DeveloperPage").then((module) => ({ default: module.DeveloperPage })),
 );
@@ -39,6 +40,7 @@ const router = createBrowserRouter(
         { index: true, element: <DashboardPage /> },
         { path: "artists", element: lazyPage(<ArtistsPage />) },
         { path: "albums", element: lazyPage(<AlbumsPage />) },
+        { path: "batch", element: lazyPage(<BatchPage />) },
         { path: "reviews", element: lazyPage(<AlbumReviewsPage />) },
         { path: "review-workflow", element: lazyPage(<ReviewPage />) },
         { path: "prompt-debug", element: lazyPage(<PromptDebugPage />) },

@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { api } from "../api/client";
-import type { ReviewRequest } from "../types/api";
+import type { BatchStartItem, ReviewRequest } from "../types/api";
 
 export function useDashboardData() {
   const statistics = useQuery({ queryKey: ["statistics"], queryFn: () => api.statistics.get() });
@@ -13,8 +13,13 @@ export function useDashboardData() {
     queryFn: () => api.plex.syncStatus(),
     refetchInterval: (query) => (query.state.data?.running ? 1000 : false),
   });
+  const batch = useQuery({
+    queryKey: ["batch", "status"],
+    queryFn: () => api.batch.status(),
+    refetchInterval: (query) => (query.state.data?.running ? 1000 : false),
+  });
 
-  return { statistics, providers, configuration, version, plexSync };
+  return { statistics, providers, configuration, version, plexSync, batch };
 }
 
 export function useProviders() {
@@ -39,6 +44,36 @@ export function useAlbumReviews() {
 export function useAlbumReviewGenerationMutation() {
   return useMutation({
     mutationFn: (albumId: string) => api.albumReviews.generate(albumId),
+  });
+}
+
+export function useBatchStatus() {
+  return useQuery({
+    queryKey: ["batch", "status"],
+    queryFn: () => api.batch.status(),
+    refetchInterval: (query) => (query.state.data?.running ? 1000 : false),
+  });
+}
+
+export function useBatchHistory() {
+  return useQuery({ queryKey: ["batch", "history"], queryFn: () => api.batch.history() });
+}
+
+export function useBatchStartMutation() {
+  return useMutation({
+    mutationFn: (items: BatchStartItem[]) => api.batch.start(items),
+  });
+}
+
+export function useBatchCancelMutation() {
+  return useMutation({
+    mutationFn: () => api.batch.cancel(),
+  });
+}
+
+export function useBatchClearMutation() {
+  return useMutation({
+    mutationFn: () => api.batch.clear(),
   });
 }
 

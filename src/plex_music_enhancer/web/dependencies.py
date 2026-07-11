@@ -15,6 +15,7 @@ from plex_music_enhancer.api.services import (
     ReviewAPIService,
 )
 from plex_music_enhancer.apply import ApplyService
+from plex_music_enhancer.batch import BatchQueueService
 from plex_music_enhancer.config import Settings
 from plex_music_enhancer.plex.sync import PlexLibrarySyncService
 from plex_music_enhancer.review import ReviewService
@@ -76,3 +77,9 @@ def get_apply_api_service() -> ApplyAPIService:
         verification_confidence_threshold=settings.quality.verification_confidence_threshold,
     )
     return ApplyAPIService(apply_service)
+
+
+@lru_cache
+def get_batch_queue_service() -> BatchQueueService:
+    """Return the process-wide persistent batch queue service."""
+    return BatchQueueService()

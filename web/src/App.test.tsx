@@ -63,11 +63,13 @@ function stubDashboardApi() {
           ? { configuration: { plexConfigured: true } }
           : url.endsWith("/plex/sync/status")
             ? { running: false, progress: 100, artists: 12, albums: 34, tracks: 99, lastSync: null }
-            : url.endsWith("/system/version")
-              ? { version: "1.0.0", apiVersion: "v1" }
-              : url.endsWith("/debug/review")
-                ? { exists: false, sections: {} }
-                : {};
+            : url.endsWith("/batch/status")
+              ? { running: false, cancelled: false, progress: 0, queue: [], pending: 0, completed: 0, failed: 0, skipped: 0, total: 0 }
+              : url.endsWith("/system/version")
+                ? { version: "1.0.0", apiVersion: "v1" }
+                : url.endsWith("/debug/review")
+                  ? { exists: false, sections: {} }
+                  : {};
 
     return new Response(JSON.stringify(payload), {
       status: 200,
@@ -116,6 +118,7 @@ describe("App navigation", () => {
     expect(within(sidebar as HTMLElement).getByText("Dashboard")).toBeInTheDocument();
     expect(within(sidebar as HTMLElement).getByText("Künstler")).toBeInTheDocument();
     expect(within(sidebar as HTMLElement).getByText("Alben")).toBeInTheDocument();
+    expect(within(sidebar as HTMLElement).getByText("Batch")).toBeInTheDocument();
     expect(within(sidebar as HTMLElement).getByText("Prompt Debug")).toBeInTheDocument();
     expect(within(sidebar as HTMLElement).getByText("Developer")).toBeInTheDocument();
   });

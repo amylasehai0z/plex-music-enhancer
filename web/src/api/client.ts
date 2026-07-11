@@ -3,6 +3,9 @@ import type {
   ApplyResponse,
   AlbumReviewGenerationResponse,
   AlbumReviewOverviewResponse,
+  BatchHistoryResponse,
+  BatchStartItem,
+  BatchStatusResponse,
   ConfigurationUpdateRequest,
   ConfigurationResponse,
   DeveloperDoctorReport,
@@ -181,6 +184,30 @@ export class AlbumReviewsApi {
   }
 }
 
+export class BatchApi {
+  constructor(private readonly client: ApiClient) {}
+
+  start(items: BatchStartItem[]): Promise<BatchStatusResponse> {
+    return this.client.post<BatchStatusResponse>("/batch/start", { items });
+  }
+
+  cancel(): Promise<BatchStatusResponse> {
+    return this.client.post<BatchStatusResponse>("/batch/cancel", {});
+  }
+
+  clear(): Promise<BatchStatusResponse> {
+    return this.client.post<BatchStatusResponse>("/batch/clear", {});
+  }
+
+  status(): Promise<BatchStatusResponse> {
+    return this.client.get<BatchStatusResponse>("/batch/status");
+  }
+
+  history(): Promise<BatchHistoryResponse> {
+    return this.client.get<BatchHistoryResponse>("/batch/history");
+  }
+}
+
 export class SystemApi {
   constructor(private readonly client: ApiClient) {}
 
@@ -237,6 +264,7 @@ export const api = {
   library: new LibraryApi(client),
   plex: new PlexApi(client),
   albumReviews: new AlbumReviewsApi(client),
+  batch: new BatchApi(client),
   statistics: new StatisticsApi(client),
   system: new SystemApi(client),
   logs: new LogApi(client),

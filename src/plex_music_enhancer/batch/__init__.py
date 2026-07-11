@@ -2,6 +2,7 @@
 
 from plex_music_enhancer.batch.filters import filter_album_candidates, is_missing_summary
 from plex_music_enhancer.batch.progress import BatchJobProgress, BatchProgressStore
+from plex_music_enhancer.batch.queue import BatchQueueError, BatchQueueService, BatchQueueStore
 from plex_music_enhancer.batch.service import (
     AlbumSource,
     BatchAlbumCandidate,
@@ -21,6 +22,9 @@ __all__ = [
     "BatchDecision",
     "BatchJobProgress",
     "BatchProgressStore",
+    "BatchQueueError",
+    "BatchQueueService",
+    "BatchQueueStore",
     "BatchReviewError",
     "BatchReviewOptions",
     "BatchReviewReport",

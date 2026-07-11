@@ -28,6 +28,9 @@ function LocationProbe() {
 function stubAlbumsApi() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.endsWith("/batch/start") && init?.method === "POST") {
+      return jsonResponse({ running: true, cancelled: false, progress: 0, queue: [], pending: 1, completed: 0, failed: 0, skipped: 0, total: 1 });
+    }
     if (url.endsWith("/reviews/generate/201") && init?.method === "POST") {
       return jsonResponse({ status: "started", albumId: "201" });
     }
@@ -237,6 +240,26 @@ describe("AlbumsPage", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Pastel Blues").length).toBeGreaterThan(0);
       expect(screen.getByText("Wild Is the Wind")).toBeInTheDocument();
+    });
+  });
+
+  it("starts a batch for selected albums", async () => {
+    const fetchMock = stubAlbumsApi();
+
+    renderPage();
+
+    expect(await screen.findByText("Pastel Blues")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Pastel Blues auswählen"));
+    fireEvent.click(screen.getByRole("button", { name: "Batch starten" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/batch/start",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"target":"album"'),
+        }),
+      );
     });
   });
 });

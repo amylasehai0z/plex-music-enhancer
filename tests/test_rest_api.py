@@ -17,6 +17,9 @@ from plex_music_enhancer.api.models import (
     AlbumReviewResponse,
     ApplyResponse,
     ArtistReviewResponse,
+    BatchHistoryResponse,
+    BatchQueueItem,
+    BatchStatusResponse,
     DebugMeta,
     PlexSyncStatusResponse,
     PromptAnalysis,
@@ -43,6 +46,7 @@ from plex_music_enhancer.web.app import create_app
 from plex_music_enhancer.web.dependencies import (
     get_album_review_service,
     get_apply_api_service,
+    get_batch_queue_service,
     get_configuration_api_service,
     get_plex_sync_service,
     get_review_api_service,
@@ -237,6 +241,38 @@ def test_album_review_endpoints_use_injected_service() -> None:
     assert started.json() == {"status": "started", "albumId": "200"}
     assert review.status_code == 200
     assert review.json()["content"]["rating"] == 88
+
+
+def test_batch_endpoints_use_injected_service() -> None:
+    """Batch endpoints should expose queue status and history."""
+    app = create_app()
+    app.dependency_overrides[get_batch_queue_service] = lambda: _FakeBatchQueueService()
+    client = TestClient(app)
+
+    started = client.post(
+        "/api/v1/batch/start",
+        json={
+            "items": [
+                {
+                    "target": "artist",
+                    "plexId": "100",
+                    "name": "Nina Simone",
+                    "artist": "Nina Simone",
+                }
+            ]
+        },
+    )
+    status = client.get("/api/v1/batch/status")
+    history = client.get("/api/v1/batch/history")
+    cancelled = client.post("/api/v1/batch/cancel")
+
+    assert started.status_code == 200
+    assert started.json()["pending"] == 1
+    assert status.status_code == 200
+    assert status.json()["queue"][0]["name"] == "Nina Simone"
+    assert history.status_code == 200
+    assert history.json()["history"][0]["status"] == "completed"
+    assert cancelled.status_code == 200
 
 
 def test_album_endpoints_use_plex_sync_snapshot() -> None:
@@ -605,6 +641,43 @@ class _FakeAlbumReviewService:
         )
 
 
+class _FakeBatchQueueService:
+    """Fake batch queue API service."""
+
+    def start(self, items):
+        """Return fake queue status."""
+        return _batch_status(pending=len(items))
+
+    def cancel(self):
+        """Return fake cancelled status."""
+        return _batch_status(message="cancelled")
+
+    def clear(self):
+        """Return fake cleared status."""
+        return _batch_status()
+
+    def status(self):
+        """Return fake status."""
+        return _batch_status(pending=1)
+
+    def history(self):
+        """Return fake history."""
+        return BatchHistoryResponse(
+            history=[
+                BatchQueueItem(
+                    id="history-1",
+                    target="artist",
+                    plex_id="100",
+                    name="Nina Simone",
+                    artist="Nina Simone",
+                    status="completed",
+                    progress=100,
+                    review_id="100",
+                )
+            ]
+        )
+
+
 def _api_review_document(
     *,
     target: str = "album",
@@ -647,6 +720,27 @@ def _api_review_document(
         provider="openai",
         model="gpt-5.5",
         context={"generatedAt": datetime(2026, 1, 1, tzinfo=UTC).isoformat()},
+    )
+
+
+def _batch_status(*, pending: int = 0, message: str | None = None) -> BatchStatusResponse:
+    """Return fake batch status."""
+    item = BatchQueueItem(
+        id="queue-1",
+        target="artist",
+        plex_id="100",
+        name="Nina Simone",
+        artist="Nina Simone",
+        status="pending",
+        progress=0,
+    )
+    return BatchStatusResponse(
+        running=pending > 0,
+        progress=0,
+        queue=[item] if pending else [],
+        pending=pending,
+        total=pending,
+        message=message,
     )
 
 

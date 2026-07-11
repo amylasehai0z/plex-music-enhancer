@@ -11,6 +11,7 @@ from plex_music_enhancer.web.routers import (
     albums,
     apply,
     artists,
+    batch,
     config,
     debug,
     library,
@@ -55,6 +56,7 @@ def create_app():
     app.include_router(reviews.router, prefix=f"{prefix}/reviews", tags=["reviews"])
     app.include_router(preview.router, prefix=f"{prefix}/preview", tags=["preview"])
     app.include_router(apply.router, prefix=f"{prefix}/apply", tags=["apply"])
+    app.include_router(batch.router, prefix=f"{prefix}/batch", tags=["batch"])
     app.include_router(statistics.router, prefix=f"{prefix}/statistics", tags=["statistics"])
     app.include_router(logs.router, prefix=f"{prefix}/logs", tags=["logs"])
     app.include_router(debug.router, prefix=f"{prefix}/debug", tags=["debug"])

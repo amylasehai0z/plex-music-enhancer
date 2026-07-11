@@ -13,7 +13,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useQueryClient } from "@tanstack/react-query";
-import { Disc3, Eye, MoreHorizontal, PencilLine, Play, RefreshCw, Sparkles } from "lucide-react";
+import { Disc3, Eye, ListChecks, MoreHorizontal, PencilLine, Play, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -26,13 +26,14 @@ import {
   LibraryExplorer,
   LibraryLoadingState,
 } from "../components/LibraryExplorer";
-import { useAlbum, useAlbumReviewGenerationMutation, useAlbums } from "../hooks/useApi";
+import { useAlbum, useAlbumReviewGenerationMutation, useAlbums, useBatchStartMutation } from "../hooks/useApi";
 import type { LibraryAlbumDetail } from "../types/api";
 
 export function AlbumsPage() {
   const queryClient = useQueryClient();
   const albums = useAlbums();
   const generateReview = useAlbumReviewGenerationMutation();
+  const batchStart = useBatchStartMutation();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -104,6 +105,30 @@ export function AlbumsPage() {
     });
   }
 
+  function startBatch() {
+    const selectedIds = selected.length ? selected : selectedAlbumId ? [selectedAlbumId] : [];
+    const items = rows
+      .filter((album) => selectedIds.includes(album.ratingKey))
+      .map((album) => ({
+        target: "album" as const,
+        plexId: album.ratingKey,
+        name: album.title,
+        artist: album.artist,
+        album: album.title,
+      }));
+    if (!items.length) {
+      notifications.show({ color: "yellow", message: "Wähle mindestens ein Album aus." });
+      return;
+    }
+    batchStart.mutate(items, {
+      onSuccess: () => {
+        notifications.show({ color: "teal", message: "Batch wurde gestartet." });
+        navigate("/batch");
+      },
+      onError: (error) => notifications.show({ color: "red", message: error.message }),
+    });
+  }
+
   if (albums.isLoading) {
     return <LibraryLoadingState label="Alben werden geladen..." />;
   }
@@ -157,6 +182,9 @@ export function AlbumsPage() {
         </Group>
         <Button leftSection={<RefreshCw size={14} />} size="xs" variant="subtle" onClick={() => void albums.refetch()}>
           Refresh
+        </Button>
+        <Button leftSection={<ListChecks size={14} />} size="xs" variant="light" loading={batchStart.isPending} onClick={startBatch}>
+          Batch starten
         </Button>
         </>
       }

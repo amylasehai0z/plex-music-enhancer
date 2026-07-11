@@ -337,3 +337,43 @@ export interface AlbumReviewGenerationResponse {
   status: string;
   albumId: string;
 }
+
+export type BatchItemStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export interface BatchStartItem {
+  target: ReviewTarget;
+  plexId: string;
+  name: string;
+  artist?: string | null;
+  album?: string | null;
+}
+
+export interface BatchQueueItem extends BatchStartItem {
+  id: string;
+  status: BatchItemStatus;
+  progress: number;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  runtimeSeconds?: number | null;
+  error?: string | null;
+  reviewId?: string | null;
+}
+
+export interface BatchStatusResponse {
+  running: boolean;
+  cancelled: boolean;
+  progress: number;
+  active?: BatchQueueItem | null;
+  queue: BatchQueueItem[];
+  pending: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  total: number;
+  estimatedRemainingSeconds?: number | null;
+  message?: string | null;
+}
+
+export interface BatchHistoryResponse {
+  history: BatchQueueItem[];
+}

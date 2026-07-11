@@ -12,7 +12,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { Eye, MoreHorizontal, Music2, PencilLine, Play, RefreshCw } from "lucide-react";
+import { Eye, ListChecks, MoreHorizontal, Music2, PencilLine, Play, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -25,11 +25,12 @@ import {
   LibraryExplorer,
   LibraryLoadingState,
 } from "../components/LibraryExplorer";
-import { useArtist, useArtists } from "../hooks/useApi";
+import { useArtist, useArtists, useBatchStartMutation } from "../hooks/useApi";
 import type { LibraryArtistDetail } from "../types/api";
 
 export function ArtistsPage() {
   const artists = useArtists();
+  const batchStart = useBatchStartMutation();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -70,6 +71,29 @@ export function ArtistsPage() {
 
   function reviewArtist(artist: string) {
     navigate(`/review-workflow?target=artist&artist=${encodeURIComponent(artist)}&run=1`);
+  }
+
+  function startBatch() {
+    const selectedIds = selected.length ? selected : selectedArtistId ? [selectedArtistId] : [];
+    const items = rows
+      .filter((artist) => selectedIds.includes(artist.ratingKey))
+      .map((artist) => ({
+        target: "artist" as const,
+        plexId: artist.ratingKey,
+        name: artist.title,
+        artist: artist.title,
+      }));
+    if (!items.length) {
+      notifications.show({ color: "yellow", message: "Wähle mindestens einen Künstler aus." });
+      return;
+    }
+    batchStart.mutate(items, {
+      onSuccess: () => {
+        notifications.show({ color: "teal", message: "Batch wurde gestartet." });
+        navigate("/batch");
+      },
+      onError: (error) => notifications.show({ color: "red", message: error.message }),
+    });
   }
 
   if (artists.isLoading) {
@@ -124,6 +148,9 @@ export function ArtistsPage() {
         </Group>
         <Button leftSection={<RefreshCw size={14} />} size="xs" variant="subtle" onClick={() => void artists.refetch()}>
           Refresh
+        </Button>
+        <Button leftSection={<ListChecks size={14} />} size="xs" variant="light" loading={batchStart.isPending} onClick={startBatch}>
+          Batch starten
         </Button>
         </>
       }

@@ -52,6 +52,20 @@ function stubDashboardApi() {
         cacheEntries: 3,
       });
     }
+    if (url.endsWith("/batch/status")) {
+      return jsonResponse({
+        running: false,
+        cancelled: false,
+        progress: 50,
+        active: null,
+        queue: [],
+        pending: 2,
+        completed: 5,
+        failed: 1,
+        skipped: 0,
+        total: 8,
+      });
+    }
     if (url.endsWith("/providers")) {
       return jsonResponse([{ name: "openai", configured: true, model: "gpt-5.5", details: { type: "ai" } }]);
     }
@@ -88,6 +102,7 @@ describe("DashboardPage", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Plex Synchronisation" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Batch Queue" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Systemstatus" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Aktivität" })).toBeInTheDocument();
     expect(await screen.findByText("5.200")).toBeInTheDocument();

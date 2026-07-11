@@ -11,6 +11,7 @@ API_VERSION = "v1"
 
 ReviewTarget = Literal["album", "artist"]
 ReviewMode = Literal["create", "translate", "improve"]
+BatchItemStatus = Literal["pending", "running", "completed", "failed", "skipped"]
 
 
 class APIModel(BaseModel):
@@ -427,3 +428,62 @@ class PlexConnectionTestResponse(APIModel):
     status_code: int | None = Field(default=None, serialization_alias="statusCode")
     server_name: str | None = Field(default=None, serialization_alias="serverName")
     message: str
+
+
+class BatchStartItem(APIModel):
+    """One requested batch queue item."""
+
+    target: ReviewTarget
+    plex_id: str = Field(alias="plexId")
+    name: str
+    artist: str | None = None
+    album: str | None = None
+
+
+class BatchStartRequest(APIModel):
+    """Request model for starting a batch review/apply queue."""
+
+    items: list[BatchStartItem] = Field(default_factory=list)
+
+
+class BatchQueueItem(APIModel):
+    """Persistent batch queue item exposed by the REST API."""
+
+    id: str
+    target: ReviewTarget
+    plex_id: str = Field(alias="plexId")
+    name: str
+    artist: str | None = None
+    album: str | None = None
+    status: BatchItemStatus = "pending"
+    progress: int = Field(default=0, ge=0, le=100)
+    started_at: datetime | None = Field(default=None, alias="startedAt")
+    ended_at: datetime | None = Field(default=None, alias="endedAt")
+    runtime_seconds: float | None = Field(default=None, ge=0, alias="runtimeSeconds")
+    error: str | None = None
+    review_id: str | None = Field(default=None, alias="reviewId")
+
+
+class BatchStatusResponse(APIModel):
+    """Current persistent batch queue status."""
+
+    running: bool = False
+    cancelled: bool = False
+    progress: int = Field(default=0, ge=0, le=100)
+    active: BatchQueueItem | None = None
+    queue: list[BatchQueueItem] = Field(default_factory=list)
+    pending: int = Field(default=0, ge=0)
+    completed: int = Field(default=0, ge=0)
+    failed: int = Field(default=0, ge=0)
+    skipped: int = Field(default=0, ge=0)
+    total: int = Field(default=0, ge=0)
+    estimated_remaining_seconds: float | None = Field(
+        default=None, ge=0, alias="estimatedRemainingSeconds"
+    )
+    message: str | None = None
+
+
+class BatchHistoryResponse(APIModel):
+    """Historical batch queue entries."""
+
+    history: list[BatchQueueItem] = Field(default_factory=list)
